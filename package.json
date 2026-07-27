@@ -1,0 +1,33 @@
+{
+  "name": "bookmarkguru",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A searchable, tag-based link database with tab awareness. Chrome MV3 extension.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "guard:isolation": "node scripts/guard-isolation.mjs",
+    "guard:permissions": "node scripts/guard-permissions.mjs",
+    "guard:csp": "node scripts/guard-csp.mjs",
+    "check": "npm run guard:isolation && npm run guard:permissions && npm run typecheck && npm run test && npm run build && npm run guard:csp",
+    "e2e": "npm run build && ./scripts/e2e/launch.sh && node scripts/e2e/import-test.mjs && node scripts/e2e/switch-test.mjs && node scripts/e2e/popup-panel-test.mjs"
+  },
+  "dependencies": {
+    "idb": "^8.0.3",
+    "minisearch": "^7.2.0",
+    "solid-js": "^1.9.14"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.7.1",
+    "@types/chrome": "^0.1.28",
+    "@types/node": "^26.1.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.1.5",
+    "vite-plugin-solid": "^2.11.13",
+    "vitest": "^3.2.4"
+  }
+}

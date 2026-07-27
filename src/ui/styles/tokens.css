@@ -1,0 +1,167 @@
+/*
+ * Design tokens.
+ *
+ * Direction: a tool you keep open all day, closer to a mail client or an issue
+ * tracker than to a bookmark manager. Density and legibility win over decoration.
+ *
+ * Two deliberate choices carry the identity:
+ *
+ * 1. Monospace is the voice of machine-readable identity — domains, counts, tags,
+ *    keyboard hints. It is this subject's own vernacular: the URL bar, the terminal.
+ *    Prose (titles, notes) stays in the system UI face, which is the most legible
+ *    thing available at 13px.
+ *
+ * 2. Amber is reserved *exclusively* for "this link is open in a tab right now".
+ *    Knowing that is the one thing Chrome's own manager cannot do, so it gets the
+ *    only saturated colour in the interface and nothing else is allowed to use it.
+ *    Indigo handles selection and focus; everything else is slate.
+ */
+
+:root {
+  /* ── type ────────────────────────────────────────────────────────────────── */
+  --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Menlo,
+    Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-lg: 15px;
+  --text-xl: 19px;
+
+  /* ── density ─────────────────────────────────────────────────────────────── */
+  --row-h: 34px;
+  --pane-pad: 12px;
+  --gap-xs: 4px;
+  --gap-sm: 8px;
+  --gap-md: 12px;
+  --gap-lg: 20px;
+  --radius: 4px;
+  --sidebar-w: 208px;
+  --detail-w: 320px;
+
+  /* ── light ───────────────────────────────────────────────────────────────── */
+  --bg: #fbfbfd;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --hover: #f2f2f7;
+  --border: #e4e4ec;
+  --border-strong: #d2d2dd;
+
+  --fg: #16161d;
+  --fg-muted: #6b6b7b;
+  --fg-faint: #9a9aa8;
+
+  --accent: #4338ca;
+  --accent-fg: #ffffff;
+  --accent-soft: #eeecfb;
+
+  /* The signal colour. Reserved for open-in-a-tab. Nothing else may use it. */
+  --signal: #a16207;
+  --signal-soft: #fdf6e3;
+  --signal-edge: #e0b050;
+
+  --danger: #b91c1c;
+
+  --shadow-pane: 0 0 0 1px var(--border);
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e0e13;
+    --surface: #16161d;
+    --surface-raised: #1c1c25;
+    --hover: #22222c;
+    --border: #26262f;
+    --border-strong: #34343f;
+
+    --fg: #e8e8f0;
+    --fg-muted: #8a8a9a;
+    --fg-faint: #62626f;
+
+    --accent: #818cf8;
+    --accent-fg: #12121a;
+    --accent-soft: #23233a;
+
+    --signal: #fcd34d;
+    --signal-soft: #251f10;
+    --signal-edge: #8a6d1f;
+
+    --danger: #f87171;
+  }
+}
+
+/* The in-app theme toggle must beat the OS preference in both directions. */
+:root[data-theme='light'] {
+  --bg: #fbfbfd;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --hover: #f2f2f7;
+  --border: #e4e4ec;
+  --border-strong: #d2d2dd;
+  --fg: #16161d;
+  --fg-muted: #6b6b7b;
+  --fg-faint: #9a9aa8;
+  --accent: #4338ca;
+  --accent-fg: #ffffff;
+  --accent-soft: #eeecfb;
+  --signal: #a16207;
+  --signal-soft: #fdf6e3;
+  --signal-edge: #e0b050;
+  --danger: #b91c1c;
+}
+
+:root[data-theme='dark'] {
+  --bg: #0e0e13;
+  --surface: #16161d;
+  --surface-raised: #1c1c25;
+  --hover: #22222c;
+  --border: #26262f;
+  --border-strong: #34343f;
+  --fg: #e8e8f0;
+  --fg-muted: #8a8a9a;
+  --fg-faint: #62626f;
+  --accent: #818cf8;
+  --accent-fg: #12121a;
+  --accent-soft: #23233a;
+  --signal: #fcd34d;
+  --signal-soft: #251f10;
+  --signal-edge: #8a6d1f;
+  --danger: #f87171;
+}
+
+/*
+ * Tag colours.
+ *
+ * Stored on a Tag as a token *name* ('blue', 'amber', …) rather than a hex value, so
+ * the stylesheet owns the actual colour and can render it correctly in both themes.
+ * Note amber here is a muted tag colour and intentionally distinct from --signal.
+ */
+:root {
+  --tag-slate: #64748b;
+  --tag-red: #dc2626;
+  --tag-orange: #ea580c;
+  --tag-amber: #ca8a04;
+  --tag-green: #16a34a;
+  --tag-teal: #0d9488;
+  --tag-blue: #2563eb;
+  --tag-purple: #7c3aed;
+  --tag-pink: #db2777;
+  --tag-cyan: #0891b2;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tag-slate: #94a3b8;
+    --tag-red: #f87171;
+    --tag-orange: #fb923c;
+    --tag-amber: #fbbf24;
+    --tag-green: #4ade80;
+    --tag-teal: #2dd4bf;
+    --tag-blue: #60a5fa;
+    --tag-purple: #a78bfa;
+    --tag-pink: #f472b6;
+    --tag-cyan: #22d3ee;
+  }
+}
