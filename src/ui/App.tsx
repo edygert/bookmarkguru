@@ -1,4 +1,4 @@
-import { Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { Sidebar } from './components/Sidebar';
 import { BookmarkList } from './components/BookmarkList';
 import { TabList } from './components/TabList';
@@ -59,6 +59,25 @@ export function App(props: { compact?: boolean }) {
 
   const onTabs = () => library.view() === 'tabs';
   const isEmpty = () => !library.state.loading && library.state.bookmarks.length === 0;
+
+  /**
+   * The triage keys that do something *in the view you are looking at*.
+   *
+   * `a`/`r`/`Delete` are always bound, but each is a no-op when the record is already in
+   * the status it would move to, so a fixed hint line would advertise `⌫ delete` in the
+   * Library and deliver nothing. That is gotcha #12 in another costume: a control's label
+   * has to describe what that control does here, not what it does somewhere else.
+   */
+  const triageKeys = (): { key: string; label: string }[] => {
+    switch (library.filters.status?.[0] ?? 'active') {
+      case 'inbox':
+        return [{ key: 'a', label: 'archive' }, { key: 'r', label: 'keep' }];
+      case 'archived':
+        return [{ key: 'r', label: 'restore' }, { key: '⌫', label: 'delete' }];
+      default:
+        return [{ key: 'a', label: 'archive' }];
+    }
+  };
 
   return (
     <div
@@ -213,6 +232,11 @@ export function App(props: { compact?: boolean }) {
             <span>
               <kbd>/</kbd> search <kbd>j</kbd>/<kbd>k</kbd> move{' '}
               <kbd>↵</kbd> {onTabs() ? 'go to tab' : 'open'}
+              <Show when={!onTabs()}>
+                <For each={triageKeys()}>
+                  {(hint) => <> <kbd>{hint.key}</kbd> {hint.label}</>}
+                </For>
+              </Show>
             </span>
           </Show>
         </div>

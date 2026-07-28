@@ -1,5 +1,5 @@
 import { createSignal, createMemo } from 'solid-js';
-import { createStore, produce } from 'solid-js/store';
+import { createStore, produce, unwrap } from 'solid-js/store';
 import { repository } from '~/core/db/idb-repository';
 import { chromeTreeToBookmarks } from '~/core/io/chrome-import';
 import { htmlToBookmarks } from '~/core/io/html-import';
@@ -367,10 +367,24 @@ async function activate(bookmark: Bookmark): Promise<void> {
   void refreshOpenTabs();
 }
 
+/**
+ * ⚠️ `unwrap`, not a spread. This is the same trap as `mergeTags` below, one level down.
+ *
+ * `{ ...current }` produces a plain object whose **nested** values are still store
+ * proxies — `tags` is a proxied array and `source` a proxied object — and structured
+ * clone cannot clone either, so `put` throws
+ * `"[object Array] could not be cloned"`. The failure is near-invisible: `patchLocal`
+ * has already run, so the list, the cursor and the detail pane all show the new value
+ * while nothing reaches IndexedDB, and the record reverts on the next reload.
+ *
+ * `unwrap` returns the underlying record, whose nested values are the raw ones. A
+ * hand-written list of nested spreads would work too and would silently rot the first
+ * time someone adds a nested field.
+ */
 async function updateBookmark(id: string, patch: Partial<Bookmark>): Promise<void> {
   const current = state.bookmarks.find((b) => b.id === id);
   if (!current) return;
-  const next: Bookmark = { ...current, ...patch, updatedAt: Date.now() };
+  const next: Bookmark = { ...unwrap(current), ...patch, updatedAt: Date.now() };
   patchLocal(id, { ...patch, updatedAt: next.updatedAt });
   await repository.put(next);
   broadcast({ kind: 'bookmarks-changed', ids: [id] });

@@ -100,9 +100,19 @@ These each cost real debugging time. None were caught by `tsc`, vitest, or the b
    which `runImport` catches and shows as a generic failure banner with every count
    reading zero. Nothing points at the real line. `mergeTags` read `state.tags` directly
    and so only failed on the *second* write: the first import runs against an empty store,
-   where `existing` is `[]` and no proxy is ever passed along. Spread (`{ ...tag }`) at
-   every boundary between the store and the repository. Found by `tabs-test.mjs`, which
-   now asserts a write into a non-empty store succeeds.
+   where `existing` is `[]` and no proxy is ever passed along. Found by `tabs-test.mjs`,
+   which now asserts a write into a non-empty store succeeds.
+
+   ⚠️ **This has now bitten twice, and a one-level spread is not the fix.**
+   `updateBookmark` did `{ ...current, ...patch }`, which yields a plain object whose
+   *nested* values — `tags`, `source` — are still proxies, so `put` threw
+   `"[object Array] could not be cloned"`. The second failure was quieter than the first:
+   `patchLocal` had already run, so the list, the cursor and the detail pane all showed
+   the new value while nothing reached IndexedDB, and the record reverted on reload.
+   Use `unwrap(current)` at the store→repository boundary. A hand-written list of nested
+   spreads works too and silently rots the first time someone adds a nested field. Found
+   by `triage-test.mjs`, which reads status back out of IndexedDB rather than trusting
+   the DOM — every DOM assertion around it passed.
 
 12. **A count next to a control must be the count that control produces.** The sidebar
    used to show `openUrls().size` — the number of open browser *tabs* — beside a control
@@ -199,7 +209,7 @@ Two deliberate choices carry the identity; both are documented in `tokens.css`.
 ```bash
 npm install
 npm run check          # isolation → permissions → tsc → 130 tests → build → CSP
-npm run e2e            # build, launch headless browser, run 36 browser assertions
+npm run e2e            # build, launch headless browser, run 58 browser assertions
 npm run build          # → dist/, load unpacked at chrome://extensions
 npm run dev            # Vite + HMR
 npm run tags:preview -- <export.html>   # what an import would produce. Writes nothing.
@@ -435,8 +445,9 @@ Roughly in order:
 3. **Filter sidebar** — domain filter, favourites, multi-tag any/all. `Filters` already
    supports all of it; the UI does not expose it yet.
 4. **Favicons** — `Favicon.tsx` exists and works; wire it into more surfaces.
-5. **Triage mode** — see below. Supersedes the planned `InboxTriage.tsx` and absorbs the
-   Phase 3 bulk-actions item.
+5. ~~**Triage mode.**~~ **Done.** See "Triage" below. Shipped as three keys on the
+   existing list — `a` archive, `r` restore, `Delete` — with no mode, no undo stack and
+   no new view. Supersedes the planned `InboxTriage.tsx`.
 6. ~~**Open-tab import → inbox.**~~ **Done.** See "Views" above. Shipped as a sidebar
    view over the live tabs, a per-row Save, a capture button, an unbound `save-open-tabs`
    command and an action context-menu entry.
@@ -446,72 +457,87 @@ Phases 3–4 (collections, saved searches, dedupe review, HTML/JSON export) are 
 
 ---
 
-## Triage mode
+## Triage
 
-**Decided.** Replaces `InboxTriage.tsx`, which was scoped to the inbox for no good reason.
+**Shipped.** Replaces `InboxTriage.tsx`, which was scoped to the inbox for no good reason,
+and the keep/discard/skip design that preceded it.
+
+Three keys, live on the list alongside `j`/`k`/`Enter`:
+
+| Key | Effect | No-op when |
+|---|---|---|
+| `a` | `status → 'archived'` | already `archived` |
+| `r` | `status → 'active'` | already `active` |
+| `Delete` / `Backspace` | permanent delete | status is not `archived` |
+
+### It is not a mode
+
+There is no `triageMode` signal, no enter or exit, no toggle. Every bookmark view runs the
+same three transitions; what differs between views is only which keys turn out to be
+no-ops, and that is a consequence of what is in the list rather than of per-view branching.
+The Library does not *disable* `r` — it holds no archived record for `r` to act on.
+
+Per view that reads as: Library — `a` archives. Inbox — `a` archives, `r` keeps. Archive —
+`r` restores, `Delete` destroys.
+
+A mode would have needed a way in, a way out, an indicator that you are in it, and a
+decision about what every other key does while you are. All of that to gate three
+keystrokes that are already unambiguous.
 
 **It operates on `library.visible()` — the current query result — not on a status.** The
-inbox is only a filter (`status: ['inbox']`), so acting on the result set instead makes the
-same component handle the inbox, everything on a dead domain, everything tagged for a
-finished course, everything older than 2015, or any search. Restricting it to one status
-buys nothing and costs a second implementation later.
+inbox is only a filter (`status: ['inbox']`), so acting on the result set makes the same
+keys handle the inbox, everything on a dead domain, everything tagged for a finished
+course, or any search.
 
-Cheap to build because it needs **no multi-select**: `selectedId` is already a single
-signal, and a keep/discard pass is inherently single-record stepping — decide, cursor
-advances. It is a keyboard mode over the existing list, not a new view.
+**No multi-select is involved.** `selectedId` is a single signal and a keep/discard pass is
+inherently single-record stepping. The record leaving the list is not coded anywhere: the
+sidebar's views are status filters, so a status change drops the record out of `visible()`
+on its own and the next row inherits the cursor's index. `landOn()` in `BookmarkList.tsx`
+exists only to bring the *selection* along, which is what makes the detail pane show the
+record that took the place rather than the one just acted on.
 
-### Three actions, and discard is contextual
+### Why this needs no undo
 
-```
-keep      inbox → active                    (leaves the queue)
-          active/archived → unchanged       (confirms, advances)
+The earlier design bound archive and delete to **one** key whose meaning depended on the
+record's current status, which made the Archive view a surface where a held-down key
+destroyed records permanently. That is what made undo a prerequisite. Separating the two
+acts removes the need entirely:
 
-discard   inbox    ──▶ archived
-          active   ──▶ archived
-          archived ──▶ deleted, permanently
+- Archiving is the fast repeatable act, and it is reversible by pressing `r`.
+- Deleting is a different key, on a different screen, over records you had to archive
+  first — and it is guarded on the **record's** status, not on which view is showing.
+  Those are equivalent today (`filters.status` always holds exactly one value), but the
+  planned domain and favourite filters can produce a mixed result set, and the per-record
+  guard is the one that stays correct there.
 
-skip      status unchanged, cursor advances
-```
+So there is no undo stack, no tombstone status, and no confirmation dialog. Deletion is
+still unrecoverable — `removeBookmark` writes straight through to IndexedDB — it is just
+no longer reachable by the key you are leaning on.
 
-**`skip` is why nothing needs remembering.** "Decide later" is its own action, so `undiscard`
-never has to restore a previous status — it always returns a record to `active`. In both
-real cases that is right: you over-archived from the library (was active, returns active),
-or you archived from the inbox and changed your mind (you have now looked at it twice; it
-is a keeper). Restoring to `inbox` would push it back into a queue you already cleared.
+### Hints are per-view for the same reason counts are
 
-### The Archive view is the only destructive surface in the app
-
-Discarding an archived record deletes it, and `removeBookmark` writes straight through to
-IndexedDB with no recovery. A held-down key in a fast flow over the Archive destroys
-records permanently.
-
-**Undo is therefore a prerequisite for triage mode, not a follow-up.** A session-scoped
-stack of recent actions is enough — nothing syncs, there is one user, and the records are
-small enough to hold in memory. Build it with the mode, not after.
-
-This matters most for imported library records. A long-lived bookmark tree accumulates
-dead links and stale interests, so a fast pass over it is exactly what you will want to
-run — and exactly where an unrecoverable mistake would hurt.
+The status bar advertises `a archive` in the Library, `a archive · r keep` in the Inbox,
+and `r restore · ⌫ delete` in the Archive. A fixed hint line would promise `⌫ delete`
+where it does nothing, which is gotcha #12 in another costume: a control's label has to
+describe what that control does *here*.
 
 ---
 
 ## Known gaps
 
 - Search is substring-only until MiniSearch is wired.
-- No triage mode yet, so pruning is one record at a time through the detail pane. Imported
-  session records are browsable via the sidebar's Inbox view — what is missing is the fast
-  pass, not access. See "Triage mode" above.
-- **No undo, anywhere.** `removeBookmark` writes straight through to IndexedDB. Tolerable
-  while deletion is a deliberate one-at-a-time act; a blocker for triage mode.
+- **No undo, anywhere.** `removeBookmark` writes straight through to IndexedDB. This is
+  survivable because deleting is reachable only from the Archive, by a key that does
+  nothing anywhere else, over records that had to be archived first — see "Triage" above.
+  Archiving, the act you actually repeat, is reversible with `r`.
 - No tag CRUD, so a qualified tag that turns out to be redundant cannot
   be merged away yet. Import over-produces on purpose; the merge UI is the other half.
 - Sidebar shows status views, the open-tabs view and tags; domain/favourite filters are
   not exposed.
 - The open-tabs view is manager-only. The side panel has no sidebar, so it cannot reach
   it — the panel keeps the `Open now` toggle but not the tab list.
-- Captured tabs go straight to the inbox with no review step. That is the intended shape
-  (triage mode is the review step), but until triage exists a large capture is a large
-  inbox.
+- Triage has no bulk actions: it is one record per keystroke by design. Emptying a
+  thousand-record inbox is a thousand keystrokes.
 - No collections, saved searches, bulk actions, or dedupe review UI yet.
 - No HTML or JSON import/export yet — **JSON backup is the only safe way to preserve
   notes and tags, so build it before relying on the library.**

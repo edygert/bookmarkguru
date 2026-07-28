@@ -65,6 +65,15 @@ export function VirtualList<T>(props: {
   cursor: number;
   onCursor: (index: number) => void;
   onActivate?: (item: T, index: number) => void;
+  /**
+   * Keys this component does not handle itself, with the row under the cursor.
+   *
+   * An escape hatch rather than more cases in the switch below: the bookmark list binds
+   * status keys here, and this component is shared with the open-tabs list, where a tab
+   * has no status to change. Teaching the shared component about bookmarks to keep the
+   * keys in one place would put the knowledge in the wrong file.
+   */
+  onKey?: (event: KeyboardEvent, item: T, index: number) => void;
   /** Renders one row. The index accessor is absolute, not relative to the window. */
   children: (item: T, index: Accessor<number>) => JSX.Element;
 }) {
@@ -135,6 +144,10 @@ export function VirtualList<T>(props: {
           props.onActivate?.(item, props.cursor);
         }
         break;
+      }
+      default: {
+        const item = props.items[props.cursor];
+        if (item !== undefined) props.onKey?.(e, item, props.cursor);
       }
     }
   };

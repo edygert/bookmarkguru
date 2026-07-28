@@ -16,6 +16,7 @@ rather than by `tsc`, vitest, or the build:
 | Empty domain for `file://` URLs | Correct code, wrong product behaviour |
 | Second write threw "could not be cloned" | Handing a Solid store proxy to IndexedDB; both are valid types, and the first import never hits it |
 | Tab count shown on a bookmark filter | Both are integers — nothing static can tell "171 tabs" from "171 matches" |
+| Status edits never reached IndexedDB | A one-level spread left nested store proxies behind; the UI showed the new value and the write threw silently |
 
 ## Running
 
@@ -26,14 +27,20 @@ node scripts/e2e/import-test.mjs
 node scripts/e2e/switch-test.mjs
 node scripts/e2e/popup-panel-test.mjs
 node scripts/e2e/tabs-test.mjs
+node scripts/e2e/triage-test.mjs
 ```
 
 Each script exits non-zero on failure. **Run them in order, against a fresh browser**
 (`launch.sh` wipes its profile): `import-test` expects an empty library, and `tabs-test`
 expects a populated one — capturing into a non-empty store is exactly the case that broke
-before, so it deliberately runs last rather than in isolation. It computes every
+before, so it deliberately runs near the end rather than in isolation. It computes every
 expectation from live state, so it does not care how many tabs the earlier scripts left
 open.
+
+`triage-test` runs **last** because it is the only script that deletes records. It seeds
+its own and narrows to them with the search box, so it does not disturb anything the
+others rely on — but a script that destroys data has no business running ahead of ones
+that count it.
 
 Override defaults with `BG_PORT`, `BG_EXT_ID`, `BG_BROWSER`.
 
