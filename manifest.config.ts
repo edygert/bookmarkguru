@@ -65,6 +65,13 @@ export default defineManifest({
       suggested_key: { default: 'Ctrl+Shift+K', mac: 'Command+Shift+K' },
       description: 'Open BookmarkGuru',
     },
+    // Deliberately unbound. Every remaining Ctrl+Shift+<letter> is spoken for by
+    // Chrome itself or by something the user has installed, and a suggested key that
+    // silently loses a conflict is worse than one the user assigns at
+    // chrome://extensions/shortcuts.
+    'save-open-tabs': {
+      description: 'Save all open tabs to the BookmarkGuru inbox',
+    },
   },
 
   // Strict default. Solid compiles JSX ahead of time, so nothing in the bundle

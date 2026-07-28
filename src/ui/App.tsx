@@ -1,6 +1,7 @@
 import { Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { Sidebar } from './components/Sidebar';
 import { BookmarkList } from './components/BookmarkList';
+import { TabList } from './components/TabList';
 import { DetailPane } from './components/DetailPane';
 import { EmptyState } from './components/EmptyState';
 import { library } from './state/library';
@@ -49,6 +50,14 @@ export function App(props: { compact?: boolean }) {
     setImporting(false);
   };
 
+  /** Capture whatever the tab list is currently showing, search filter included. */
+  const runTabCapture = async () => {
+    setImporting(true);
+    setSummary(await library.saveTabs(library.visibleTabs()));
+    setImporting(false);
+  };
+
+  const onTabs = () => library.view() === 'tabs';
   const isEmpty = () => !library.state.loading && library.state.bookmarks.length === 0;
 
   return (
@@ -67,22 +76,61 @@ export function App(props: { compact?: boolean }) {
             ref={searchRef}
             class="search"
             type="search"
-            placeholder="Search title, URL, notes, tags…"
+            placeholder={onTabs() ? 'Search open tabs…' : 'Search title, URL, notes, tags…'}
             value={library.query()}
             onInput={(e) => library.setQuery(e.currentTarget.value)}
           />
-          <Show when={!props.compact}>
-            <select
-              class="select"
-              value={library.sort().field}
-              onChange={(e) =>
-                library.setSort({ field: e.currentTarget.value as SortField, dir: 'desc' })
-              }
+
+          <Show
+            when={onTabs()}
+            fallback={
+              <>
+                <Show when={!props.compact}>
+                  <select
+                    class="select"
+                    value={library.sort().field}
+                    onChange={(e) =>
+                      library.setSort({ field: e.currentTarget.value as SortField, dir: 'desc' })
+                    }
+                  >
+                    {SORTS.map((s) => (
+                      <option value={s.field}>{s.label}</option>
+                    ))}
+                  </select>
+                </Show>
+
+                {/*
+                  A toggle, deliberately shaped like one and placed beside the search box
+                  it narrows — it composes with whichever view the sidebar has selected
+                  rather than replacing it. Its count is the number of rows it would
+                  leave, which is the whole point: it used to show the open *tab* count
+                  next to a control that filters bookmarks.
+                */}
+                <button
+                  type="button"
+                  class="toggle"
+                  aria-pressed={library.filters.openNow === true}
+                  title="Show only links that are open in a tab right now"
+                  onClick={() =>
+                    library.setFilters('openNow', library.filters.openNow ? undefined : true)
+                  }
+                >
+                  Open now
+                  <span class="toggle__count">{library.openNowCount()}</span>
+                </button>
+              </>
+            }
+          >
+            <button
+              type="button"
+              class="btn btn--primary"
+              disabled={importing() || library.unsavedTabCount() === 0}
+              onClick={() => void runTabCapture()}
             >
-              {SORTS.map((s) => (
-                <option value={s.field}>{s.label}</option>
-              ))}
-            </select>
+              {library.unsavedTabCount() === 0
+                ? 'All saved'
+                : `Save ${library.unsavedTabCount()} tabs`}
+            </button>
           </Show>
         </div>
 
@@ -93,45 +141,78 @@ export function App(props: { compact?: boolean }) {
           </div>
         </Show>
 
-        <Show when={isEmpty()}>
-          <EmptyState
-            title="Bring your bookmarks across"
-            body="Import from Chrome to get started. Folders become tags, so you can find a link by any of them instead of remembering where you filed it. Your Chrome bookmarks are left untouched."
-            actionLabel="Import from Chrome"
-            onAction={() => void runImport()}
-            busy={importing()}
-          />
-        </Show>
+        <Show when={onTabs()} fallback={
+          <>
+            <Show when={isEmpty()}>
+              <EmptyState
+                title="Bring your bookmarks across"
+                body="Import from Chrome to get started. Folders become tags, so you can find a link by any of them instead of remembering where you filed it. Your Chrome bookmarks are left untouched."
+                actionLabel="Import from Chrome"
+                onAction={() => void runImport()}
+                busy={importing()}
+                secondaryLabel={
+                  library.openTabs().length > 0
+                    ? `Or capture ${library.openTabs().length} open tabs`
+                    : undefined
+                }
+                onSecondary={() => library.showTabs()}
+              />
+            </Show>
 
-        <Show when={!isEmpty() && library.visible().length === 0 && !library.state.loading}>
-          <EmptyState
-            title="No matches"
-            body="Nothing here fits that search and the filters you have on. Try a shorter search, or clear a tag in the sidebar."
-          />
-        </Show>
+            <Show when={!isEmpty() && library.visible().length === 0 && !library.state.loading}>
+              <EmptyState
+                title="No matches"
+                body="Nothing here fits that search and the filters you have on. Try a shorter search, or clear a tag in the sidebar."
+              />
+            </Show>
 
-        <Show when={library.visible().length > 0}>
-          <BookmarkList
-            items={library.visible()}
-            onActivate={(bookmark) => void library.activate(bookmark)}
-          />
+            <Show when={library.visible().length > 0}>
+              <BookmarkList
+                items={library.visible()}
+                onActivate={(bookmark) => void library.activate(bookmark)}
+              />
+            </Show>
+          </>
+        }>
+          <Show
+            when={library.visibleTabs().length > 0}
+            fallback={
+              <EmptyState
+                title="No open tabs match"
+                body="Nothing open fits that search. Clear it to see every tab across all your windows."
+              />
+            }
+          >
+            <TabList items={library.visibleTabs()} />
+          </Show>
         </Show>
 
         <div class="status-bar">
-          <span>
-            {library.visible().length} shown · {library.state.bookmarks.length} total ·{' '}
-            {library.openUrls().size} open
-          </span>
+          <Show
+            when={onTabs()}
+            fallback={
+              <span>
+                {library.visible().length} shown · {library.state.bookmarks.length} total ·{' '}
+                {library.openNowCount()} open
+              </span>
+            }
+          >
+            <span>
+              {library.visibleTabs().length} tabs · {library.unsavedTabCount()} not saved
+            </span>
+          </Show>
+
           <Show when={summary()}>
             {(s) => (
               <span>
-                Imported {s().added} · {s().alreadySaved} already saved · {s().skipped} skipped
+                Saved {s().added} · {s().alreadySaved} already saved · {s().skipped} skipped
               </span>
             )}
           </Show>
           <Show when={!props.compact && !summary()}>
             <span>
-              <kbd>/</kbd> search <kbd>j</kbd>/<kbd>k</kbd> move <kbd>↵</kbd> open
+              <kbd>/</kbd> search <kbd>j</kbd>/<kbd>k</kbd> move{' '}
+              <kbd>↵</kbd> {onTabs() ? 'go to tab' : 'open'}
             </span>
           </Show>
         </div>

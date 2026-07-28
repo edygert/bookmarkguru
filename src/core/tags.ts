@@ -50,8 +50,14 @@ export function colorForTag(name: string): TagColor {
 export class TagCollector {
   readonly #byId = new Map<string, Tag>();
 
-  /** Returns the tag id, creating the tag on first sight. */
-  add(name: string, color?: TagColor): string {
+  /**
+   * Returns the tag id, creating the tag on first sight.
+   *
+   * `color` is a token *name* and typed as `string` rather than `TagColor` because it
+   * also arrives from `SourceTag`, which lives in types.ts and cannot import this module
+   * without a cycle. `Tag.color` is a string for the same reason.
+   */
+  add(name: string, color?: string): string {
     const clean = name.trim();
     if (!clean) return '';
     const id = tagIdFromName(clean);

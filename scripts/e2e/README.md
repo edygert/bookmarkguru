@@ -14,6 +14,8 @@ rather than by `tsc`, vitest, or the build:
 | Virtual list rendered zero rows | Library bug; container got the right height, so nothing looked wrong |
 | Undeclared `contextMenus` permission | `@types/chrome` declares the whole API regardless of the manifest |
 | Empty domain for `file://` URLs | Correct code, wrong product behaviour |
+| Second write threw "could not be cloned" | Handing a Solid store proxy to IndexedDB; both are valid types, and the first import never hits it |
+| Tab count shown on a bookmark filter | Both are integers — nothing static can tell "171 tabs" from "171 matches" |
 
 ## Running
 
@@ -23,10 +25,15 @@ npm run build
 node scripts/e2e/import-test.mjs
 node scripts/e2e/switch-test.mjs
 node scripts/e2e/popup-panel-test.mjs
+node scripts/e2e/tabs-test.mjs
 ```
 
-Each script exits non-zero on failure. Run them against a **fresh** browser
-(`launch.sh` wipes its profile) — `import-test` expects an empty library.
+Each script exits non-zero on failure. **Run them in order, against a fresh browser**
+(`launch.sh` wipes its profile): `import-test` expects an empty library, and `tabs-test`
+expects a populated one — capturing into a non-empty store is exactly the case that broke
+before, so it deliberately runs last rather than in isolation. It computes every
+expectation from live state, so it does not care how many tabs the earlier scripts left
+open.
 
 Override defaults with `BG_PORT`, `BG_EXT_ID`, `BG_BROWSER`.
 

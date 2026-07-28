@@ -1,5 +1,6 @@
 import { newId } from '../ids';
 import { domainOf, isIngestable, normalizeForDedupe } from '../normalize-url';
+import { TagCollector } from '../tags';
 import { isSessionPath, sessionDateOf, taggerForEntries, type FolderRules } from './folder-tags';
 import type {
   Bookmark, BookmarkStatus, ImportSummary, RawEntry, SourceKind, Tag,
@@ -39,6 +40,10 @@ export function ingest(entries: readonly RawEntry[], options: IngestOptions): Im
   // names are ambiguous, so it is built over the whole corpus up front.
   const tagger = taggerForEntries(entries, rules);
 
+  // Source-stated tags need no corpus pass — they are not qualified against anything —
+  // so they accumulate as we go, in their own collector.
+  const stated = new TagCollector();
+
   const bookmarks: Bookmark[] = [];
   /** normalizedUrl → index, to collapse duplicates *within this import*. */
   const seen = new Map<string, number>();
@@ -53,7 +58,14 @@ export function ingest(entries: readonly RawEntry[], options: IngestOptions): Im
     }
 
     const normalizedUrl = normalizeForDedupe(entry.url);
-    const tags = tagger.tagsFor(entry.folderPath);
+    const tags = [
+      ...new Set([
+        ...tagger.tagsFor(entry.folderPath),
+        ...(entry.sourceTags ?? [])
+          .map((tag) => stated.add(tag.name, tag.color))
+          .filter((id) => id !== ''),
+      ]),
+    ];
 
     const session = isSessionPath(entry.folderPath, rules);
 
@@ -100,13 +112,19 @@ export function ingest(entries: readonly RawEntry[], options: IngestOptions): Im
         kind,
         importedAt: now,
         ...(entry.chromeId !== undefined && { chromeId: entry.chromeId }),
+        ...(entry.windowId !== undefined && { windowId: entry.windowId }),
+        ...(entry.tabGroup !== undefined && { tabGroup: entry.tabGroup }),
         ...(folderPath.length > 0 && { originalFolderPath: folderPath }),
         ...(sessionDate !== undefined && { sessionDate }),
       },
     });
   }
 
-  const tags = tagger.allTags();
+  // Merged by id: a folder and a tab group can legitimately share a name, and they are
+  // the same tag when they do — `tagIdFromName` is what decides that, in both collectors.
+  const tags = [...new Map(
+    [...tagger.allTags(), ...stated.all()].map((tag) => [tag.id, tag]),
+  ).values()];
   // Counted from the finished records, not incremented as we go — a record can be
   // promoted out of the inbox by a later occurrence, and a running total would miss that.
   const inboxed = bookmarks.filter((b) => b.status === 'inbox').length;

@@ -9,17 +9,33 @@ const STATUS_VIEWS: { status: BookmarkStatus; label: string }[] = [
   { status: 'archived', label: 'Archive' },
 ];
 
+/**
+ * Views and tags.
+ *
+ * **Everything in this pane is a view — one at a time.** That was not always true:
+ * "Open now" used to sit among the status views while behaving as a toggle that
+ * *composed* with them, styled identically and therefore indistinguishable. Worse, it
+ * showed the number of open browser tabs beside a control that filtered bookmarks, so
+ * it could read "171" and produce an empty list. The toggle now lives in the toolbar,
+ * next to the search box it modifies, and its count is the count it delivers.
+ *
+ * What replaced it here is a genuine fourth view over the tabs themselves — including
+ * the ones that are not bookmarks yet, which no filter over the library could show.
+ */
 export function Sidebar() {
   const currentStatus = (): BookmarkStatus => library.filters.status?.[0] ?? 'active';
+  const onStatusView = (status: BookmarkStatus) =>
+    library.view() === 'bookmarks' && currentStatus() === status;
   const activeTags = () => library.filters.tags ?? [];
-
-  const selectStatus = (status: BookmarkStatus) => {
-    library.setFilters({ status: [status], tags: [] });
-  };
+  /** Tags narrow the library only, so none of them read as active from the tab view. */
+  const tagIsActive = (id: string) => library.view() === 'bookmarks' && activeTags().includes(id);
 
   /** Clicking a tag toggles it, so filters compose without a separate UI. */
   const toggleTag = (id: string) => {
     const current = activeTags();
+    // A tag narrows the library, so it has to put you back in the library to mean
+    // anything — clicking one from the tab view otherwise looks like a dead control.
+    if (library.view() !== 'bookmarks') library.showStatus(currentStatus());
     library.setFilters(
       'tags',
       current.includes(id) ? current.filter((t) => t !== id) : [...current, id],
@@ -70,8 +86,8 @@ export function Sidebar() {
             <button
               type="button"
               class="nav-item"
-              aria-current={currentStatus() === view.status}
-              onClick={() => selectStatus(view.status)}
+              aria-current={onStatusView(view.status)}
+              onClick={() => library.showStatus(view.status)}
             >
               <span class="nav-item__label">{view.label}</span>
               <span class="nav-item__count">{library.statusCounts()[view.status]}</span>
@@ -79,14 +95,15 @@ export function Sidebar() {
           )}
         </For>
 
+        {/* Tabs, not bookmarks — so the count is a tab count, and clicking shows tabs. */}
         <button
           type="button"
           class="nav-item"
-          aria-current={library.filters.openNow === true}
-          onClick={() => library.setFilters('openNow', library.filters.openNow ? undefined : true)}
+          aria-current={library.view() === 'tabs'}
+          onClick={() => library.showTabs()}
         >
-          <span class="nav-item__label">Open now</span>
-          <span class="nav-item__count">{library.openUrls().size}</span>
+          <span class="nav-item__label">Open tabs</span>
+          <span class="nav-item__count">{library.openTabs().length}</span>
         </button>
       </div>
 
@@ -99,7 +116,7 @@ export function Sidebar() {
                 <button
                   type="button"
                   class="nav-item"
-                  aria-current={activeTags().includes(entry.tag.id)}
+                  aria-current={tagIsActive(entry.tag.id)}
                   onClick={() => toggleTag(entry.tag.id)}
                 >
                   <span
@@ -117,7 +134,7 @@ export function Sidebar() {
                     <button
                       type="button"
                       class="nav-item nav-item--child"
-                      aria-current={activeTags().includes(child.tag.id)}
+                      aria-current={tagIsActive(child.tag.id)}
                       onClick={() => toggleTag(child.tag.id)}
                     >
                       <span class="nav-item__label">

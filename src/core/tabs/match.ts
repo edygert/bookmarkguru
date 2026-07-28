@@ -12,12 +12,22 @@ import { normalizeForMatch } from '../normalize-url';
  * are added deliberately rather than assumed.
  */
 
-/** Anything with a URL. Structural so tests need no chrome types. */
+/**
+ * Anything with a URL. Structural so tests need no chrome types.
+ *
+ * Matching only ever reads `url`. The rest is here because this is the one place that
+ * describes the shape of a tab, and the open-tabs view and `io/tabs-import.ts` need
+ * somewhere to agree on it — a second near-identical `TabLike` would drift.
+ */
 export interface TabLike {
   id?: number | undefined;
   windowId?: number;
   url?: string | undefined;
   title?: string | undefined;
+  /** chrome.tabs.Tab.groupId. Chrome uses -1 for "not in a group", never undefined. */
+  groupId?: number;
+  /** Position within its window, for listing tabs in the order they appear. */
+  index?: number;
 }
 
 export interface MatchStrategy {

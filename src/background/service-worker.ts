@@ -1,6 +1,8 @@
 import { findMatchingTab } from '~/core/tabs/match';
 import { repository } from '~/core/db/idb-repository';
-import { MANAGER_PAGE, type Message, type OpenOrSwitchResult } from '~/shared/messages';
+import {
+  MANAGER_PAGE, SAVE_TABS_HASH, send, type Message, type OpenOrSwitchResult,
+} from '~/shared/messages';
 
 /**
  * Event-driven browser work only.
@@ -59,20 +61,39 @@ async function recordOpen(bookmarkId: string): Promise<void> {
   }
 }
 
-/** Reuse the manager tab if one is already open rather than piling up duplicates. */
-async function openManager(): Promise<{ ok: true }> {
+/**
+ * Reuse the manager tab if one is already open rather than piling up duplicates.
+ *
+ * `hash` asks the page to do something on arrival. Match patterns ignore the fragment,
+ * so the query below still finds an existing manager whatever hash it is carrying.
+ */
+async function openManager(hash = ''): Promise<{ ok: true }> {
   const url = chrome.runtime.getURL(MANAGER_PAGE);
   const [existing] = await chrome.tabs.query({ url });
 
   if (existing?.id != null) {
-    await chrome.tabs.update(existing.id, { active: true });
+    await chrome.tabs.update(existing.id, { active: true, ...(hash && { url: url + hash }) });
     if (existing.windowId != null) {
       await chrome.windows.update(existing.windowId, { focused: true });
     }
   } else {
-    await chrome.tabs.create({ url });
+    await chrome.tabs.create({ url: url + hash });
   }
   return { ok: true };
+}
+
+/**
+ * Route a tab capture to a manager page, because the write is far too big for a worker
+ * that MV3 will kill after ~30s idle.
+ *
+ * Message first, so an already-open manager acts without its tab being navigated. Only
+ * the manager answers this kind; every other surface ignores it, and `send` resolves
+ * undefined when nobody replies — which is also what a manager still loading its
+ * listeners looks like, hence the hash fallback rather than giving up.
+ */
+async function requestTabCapture(): Promise<void> {
+  const answered = await send({ kind: 'save-open-tabs' });
+  if (!answered) await openManager(SAVE_TABS_HASH);
 }
 
 chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
@@ -85,6 +106,11 @@ chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) =
       void openManager().then(sendResponse);
       return true;
 
+    case 'save-open-tabs':
+      // Handled by the manager page. Ignored here so the worker never answers on its
+      // behalf — a reply from the worker would look like the capture had been accepted.
+      return false;
+
     case 'bookmarks-changed':
       // Broadcast for other surfaces; the worker itself holds no cache to invalidate.
       return false;
@@ -96,6 +122,7 @@ chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) =
 
 chrome.commands.onCommand.addListener((command) => {
   if (command === 'open-manager') void openManager();
+  else if (command === 'save-open-tabs') void requestTabCapture();
 });
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -110,11 +137,19 @@ chrome.runtime.onInstalled.addListener(() => {
     title: 'Open BookmarkGuru manager',
     contexts: ['action'],
   });
+  // The keyboard command for this ships unbound, so this is its only default route.
+  chrome.contextMenus.create({
+    id: 'save-open-tabs',
+    title: 'Save all open tabs to the inbox',
+    contexts: ['action'],
+  });
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === 'open-manager') {
     void openManager();
+  } else if (info.menuItemId === 'save-open-tabs') {
+    void requestTabCapture();
   } else if (info.menuItemId === 'open-side-panel' && tab?.windowId != null) {
     void chrome.sidePanel.open({ windowId: tab.windowId });
   }

@@ -10,21 +10,31 @@ export function EmptyState(props: {
   actionLabel?: string;
   onAction?: () => void;
   busy?: boolean;
+  /** A second way out, when the obvious next step is not the only sensible one. */
+  secondaryLabel?: string;
+  onSecondary?: () => void;
 }) {
   return (
     <div class="empty">
       <div class="empty__title">{props.title}</div>
       <p class="empty__body">{props.body}</p>
-      <Show when={props.actionLabel}>
-        <button
-          type="button"
-          class="btn btn--primary"
-          onClick={() => props.onAction?.()}
-          disabled={props.busy}
-        >
-          {props.busy ? 'Importing…' : props.actionLabel}
-        </button>
-      </Show>
+      <div class="empty__actions">
+        <Show when={props.actionLabel}>
+          <button
+            type="button"
+            class="btn btn--primary"
+            onClick={() => props.onAction?.()}
+            disabled={props.busy}
+          >
+            {props.busy ? 'Importing…' : props.actionLabel}
+          </button>
+        </Show>
+        <Show when={props.secondaryLabel}>
+          <button type="button" class="btn" onClick={() => props.onSecondary?.()}>
+            {props.secondaryLabel}
+          </button>
+        </Show>
+      </div>
     </div>
   );
 }

@@ -45,6 +45,22 @@ export interface SourceMeta {
 }
 
 /**
+ * A tag the source stated outright — the title someone typed on a Chrome tab group —
+ * as opposed to one inferred from a folder path.
+ *
+ * Deliberately kept separate from `folderPath`. The folder rules exist to clean up a
+ * *filing tree*: they drop containers, strip date stamps, and qualify names that appear
+ * under more than one parent. None of that applies to a label a person wrote on purpose,
+ * and running it through anyway would both delete good tags (a group named "Feb03") and
+ * split one group across windows into `Window 3 · Research` and `Window 5 · Research`.
+ */
+export interface SourceTag {
+  name: string;
+  /** A token name from `TAG_COLORS`. Omitted means derive one from the name. */
+  color?: string;
+}
+
+/**
  * What an importer's parser produces, before any tagging happens.
  *
  * `folderPath` is **raw**: noise filtering and tag qualification are `folder-tags.ts`'s
@@ -58,6 +74,12 @@ export interface RawEntry {
   folderPath: string[];
   /** Chrome's own bookmark node id, when the source had one. */
   chromeId?: string;
+  /** Tags stated by the source itself; bypasses the folder rules. See `SourceTag`. */
+  sourceTags?: readonly SourceTag[];
+  /** tab-import: which window the tab was in. */
+  windowId?: number;
+  /** tab-import: title of the enclosing tab group, when it had one. */
+  tabGroup?: string;
 }
 
 export interface Bookmark {

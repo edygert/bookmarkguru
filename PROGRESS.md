@@ -95,6 +95,23 @@ These each cost real debugging time. None were caught by `tsc`, vitest, or the b
    the format is machine-generated, one tag per line, and `</DL>` counting is the only
    sound way to track depth since indentation is not reliable and `<DT>` has no close tag.
 
+11. **Never hand a Solid store value to IndexedDB.** `createStore` returns proxies, and
+   structured clone cannot clone one — `put` throws `"#<Object> could not be cloned"`,
+   which `runImport` catches and shows as a generic failure banner with every count
+   reading zero. Nothing points at the real line. `mergeTags` read `state.tags` directly
+   and so only failed on the *second* write: the first import runs against an empty store,
+   where `existing` is `[]` and no proxy is ever passed along. Spread (`{ ...tag }`) at
+   every boundary between the store and the repository. Found by `tabs-test.mjs`, which
+   now asserts a write into a non-empty store succeeds.
+
+12. **A count next to a control must be the count that control produces.** The sidebar
+   used to show `openUrls().size` — the number of open browser *tabs* — beside a control
+   that filtered *bookmarks*, so it read "171" and delivered an empty list. Both are
+   plausible integers and neither `tsc` nor a unit test can tell them apart, which is why
+   `openNowCount` runs the real query pipeline with `openNow` forced on rather than
+   counting something adjacent. The same rule is why the capture button's count excludes
+   browser-internal tabs and dedupes by normalized URL: it promises records added.
+
 ---
 
 ## Architecture
@@ -150,12 +167,13 @@ src/
     io/ingest.ts            RawEntry[] → records: dedupe, tag union, status routing
     io/chrome-import.ts     live bookmark tree → RawEntry[]
     io/html-import.ts       exported .html → RawEntry[] (regex, never DOMParser)
+    io/tabs-import.ts       open tabs → RawEntry[] (no folder path; sourceTags instead)
   shared/messages.ts        typed message contracts
   background/service-worker.ts
   ui/
     App.tsx                 shared shell; `compact` collapses to one column
     state/library.ts        the ONLY place Solid meets the repository
-    components/             Sidebar · BookmarkList · BookmarkRow · DetailPane · …
+    components/             Sidebar · VirtualList · BookmarkList · TabList · DetailPane · …
     styles/tokens.css       design tokens — read the header comment
     manager|panel|popup .html/.tsx
 ```
@@ -180,8 +198,8 @@ Two deliberate choices carry the identity; both are documented in `tokens.css`.
 
 ```bash
 npm install
-npm run check          # isolation → permissions → tsc → 90 tests → build → CSP
-npm run e2e            # build, launch headless browser, run 19 browser assertions
+npm run check          # isolation → permissions → tsc → 130 tests → build → CSP
+npm run e2e            # build, launch headless browser, run 36 browser assertions
 npm run build          # → dist/, load unpacked at chrome://extensions
 npm run dev            # Vite + HMR
 npm run tags:preview -- <export.html>   # what an import would produce. Writes nothing.
@@ -202,6 +220,54 @@ Import your Chrome bookmarks (folders → tags, duplicates collapsed with tags u
 its detail, save the current tab from the popup with tags and already-saved detection,
 browse in the side panel, and **activate a bookmark to focus the tab that already has it
 open** rather than opening a duplicate.
+
+---
+
+## Views, and the difference between a view and a filter
+
+The sidebar holds **views**, one active at a time. A filter that *composes* with the
+active view does not belong there, and putting one there was a real bug worth recording.
+
+| | | |
+|---|---|---|
+| Library · Inbox · Archive | view | `status` is one field per record, so these partition the library |
+| Open tabs | view | lists **tabs**, including ones that are not records at all |
+| Open now | filter, in the toolbar | narrows whichever view is active |
+
+**Why `Open now` moved.** It sat among the three status views, styled identically, while
+behaving as a toggle that layered on top of them — so nothing distinguished "replaces the
+list" from "narrows the list", and both could read as selected at once. Worse, its count
+was `openUrls().size`: the number of open browser tabs, next to a control that filters
+bookmarks. With 171 tabs and a mostly-unbookmarked browser it advertised 171 and produced
+an empty list. See gotcha #12.
+
+**Why `Open tabs` is a view and not a filter.** No filter over the library can show a URL
+the database has never seen, and the interesting tabs are exactly the unsaved ones. The
+view lists every open tab across every window, marks the ones already in the library, and
+offers to capture the rest.
+
+### Capturing tabs
+
+`Save N tabs` captures what the list is currently showing, search filter included; the
+`save-open-tabs` command and the action's context menu capture everything. All of it
+lands as `status: 'inbox'` — a window full of tabs is a triage queue, the same reasoning
+that routes imported saved-tab-sets there.
+
+Three things are deliberate:
+
+- **Tab groups and window numbers become tags, via `sourceTags`, not via `folderPath`.**
+  Routing them through the folder machinery would run them past rules built for a filing
+  tree: a group named `Feb03` would be dropped as a date, and a group appearing in two
+  windows would be judged ambiguous and split into `Window 3 · Research` and
+  `Window 5 · Research` — the exact opposite of what qualification is for. `SourceTag`
+  exists to say "a person typed this on purpose; leave it alone".
+- **Window ordinals are computed over every open window**, then passed in. Left to
+  default, capturing a filtered subset renumbers it, so one window's tabs come back
+  labelled `Window 1` whichever window they came from.
+- **The bulk write runs in the manager page, never the worker.** MV3 terminates an idle
+  worker after ~30s and a few hundred tabs is precisely the write that gets killed
+  halfway. The worker's whole job is to make sure a manager exists to hear the request —
+  by message if one is open, by URL hash if one must be created.
 
 ---
 
@@ -371,10 +437,9 @@ Roughly in order:
 4. **Favicons** — `Favicon.tsx` exists and works; wire it into more surfaces.
 5. **Triage mode** — see below. Supersedes the planned `InboxTriage.tsx` and absorbs the
    Phase 3 bulk-actions item.
-6. **Open-tab import → inbox.** Capture all tabs across all 7 windows in one
-   `chrome.tabs.query({})`, convert tab groups and window numbers to tags, land everything
-   as `status: 'inbox'`. `status` and `SourceMeta.windowId/tabGroup` already exist in the
-   schema for this. Also ship it as a standing "Save all open tabs" command.
+6. ~~**Open-tab import → inbox.**~~ **Done.** See "Views" above. Shipped as a sidebar
+   view over the live tabs, a per-row Save, a capture button, an unbound `save-open-tabs`
+   command and an action context-menu entry.
 
 Phases 3–4 (collections, saved searches, dedupe review, HTML/JSON export) are in
 `~/.claude/plans/create-a-plan-for-compressed-beaver.md`.
@@ -440,7 +505,13 @@ run — and exactly where an unrecoverable mistake would hurt.
   while deletion is a deliberate one-at-a-time act; a blocker for triage mode.
 - No tag CRUD, so a qualified tag that turns out to be redundant cannot
   be merged away yet. Import over-produces on purpose; the merge UI is the other half.
-- Sidebar shows status views and tags; domain/favourite filters are not exposed.
+- Sidebar shows status views, the open-tabs view and tags; domain/favourite filters are
+  not exposed.
+- The open-tabs view is manager-only. The side panel has no sidebar, so it cannot reach
+  it — the panel keeps the `Open now` toggle but not the tab list.
+- Captured tabs go straight to the inbox with no review step. That is the intended shape
+  (triage mode is the review step), but until triage exists a large capture is a large
+  inbox.
 - No collections, saved searches, bulk actions, or dedupe review UI yet.
 - No HTML or JSON import/export yet — **JSON backup is the only safe way to preserve
   notes and tags, so build it before relying on the library.**

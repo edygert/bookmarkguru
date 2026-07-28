@@ -11,6 +11,12 @@ export type Message =
   | { kind: 'open-or-switch'; url: string; bookmarkId?: string }
   /** Focus the manager page, opening it only if it isn't already open. */
   | { kind: 'open-manager' }
+  /**
+   * Capture every open tab into the inbox. Handled by the **manager page**, not the
+   * worker: this is a bulk IndexedDB write and MV3 may terminate an idle worker
+   * mid-operation. The worker's job is only to make sure a manager exists to hear it.
+   */
+  | { kind: 'save-open-tabs' }
   /** Fan-out after a write, so other open surfaces refresh. Fire-and-forget. */
   | { kind: 'bookmarks-changed'; ids: string[] };
 
@@ -24,6 +30,7 @@ export interface OpenOrSwitchResult {
 export interface ResultOf {
   'open-or-switch': OpenOrSwitchResult;
   'open-manager': { ok: true };
+  'save-open-tabs': { ok: true };
   'bookmarks-changed': void;
 }
 
@@ -52,3 +59,12 @@ export function broadcast(message: Message): void {
 
 /** Relative to the extension root; resolve with chrome.runtime.getURL. */
 export const MANAGER_PAGE = 'src/ui/manager.html';
+
+/**
+ * Asks a freshly opened manager to capture the open tabs.
+ *
+ * A hash rather than a second message because the worker cannot send to a page that has
+ * not finished loading its listeners. The manager reads this on startup and strips it
+ * immediately, so reloading the tab does not capture everything a second time.
+ */
+export const SAVE_TABS_HASH = '#save-open-tabs';
