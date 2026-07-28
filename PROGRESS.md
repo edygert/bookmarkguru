@@ -129,7 +129,9 @@ background/service-worker.ts
 ## File map
 
 ```
-manifest.config.ts          CRXJS manifest (permissions live here)
+manifest.config.ts          CRXJS manifest (permissions and icons live here)
+public/icons/               generated PNGs; Vite copies public/ to the bundle root
+scripts/make-icons.py       the editable icon source — edit this, not the PNGs
 vite.config.ts              note the explicit manager.html input
 scripts/
   guard-isolation.mjs       core/ must stay framework-free

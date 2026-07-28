@@ -30,9 +30,27 @@ export default defineManifest({
     type: 'module',
   },
 
+  /*
+   * Served from `public/`, which Vite copies to the bundle root verbatim — so these
+   * paths are `icons/…`, not `public/icons/…`. Regenerate with
+   * `python3 scripts/make-icons.py`; that script is the editable source, not the PNGs.
+   */
+  icons: {
+    16: 'icons/icon-16.png',
+    32: 'icons/icon-32.png',
+    48: 'icons/icon-48.png',
+    128: 'icons/icon-128.png',
+  },
+
   action: {
     default_popup: 'src/ui/popup.html',
     default_title: 'Save this tab to BookmarkGuru',
+    // Chrome picks per display density: 16 at 1x, 32 at 2x. Without this the toolbar
+    // falls back to a generic placeholder even when `icons` above is set.
+    default_icon: {
+      16: 'icons/icon-16.png',
+      32: 'icons/icon-32.png',
+    },
   },
 
   side_panel: {

@@ -23,17 +23,42 @@ function Popup() {
   const [saved, setSaved] = createSignal(false);
   const [ready, setReady] = createSignal(false);
 
+  /**
+   * On a page that cannot be saved, skip the popup and go straight to the library.
+   *
+   * The action exists to capture the current tab. When there is nothing to capture —
+   * a chrome:// page, the extension's own tabs — the only other thing this extension
+   * does is open the library, so asking the user to click a second time to reach the
+   * one remaining option is a step with no decision in it.
+   *
+   * `openManager` focuses an existing manager tab rather than creating another, so
+   * repeated clicks from browser pages cannot pile up duplicates.
+   */
+  const openLibraryAndClose = async () => {
+    // Await before closing: tearing down the popup mid-send cancels the message and
+    // the manager never opens.
+    await send({ kind: 'open-manager' });
+    window.close();
+  };
+
   onMount(async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.url) return setReady(true);
 
-    setUrl(tab.url);
-    setTitle(tab.title ?? tab.url);
+    // A real popup is never a tab, so the active tab is never this page. Seeing
+    // ourselves means popup.html was opened *as* a tab — navigated to directly, or by
+    // the e2e harness — and redirecting then would fight whoever opened it, and could
+    // loop. Fall through instead and render the library link.
+    const tabUrl = tab?.url;
+    const isSelfAsTab = tabUrl === location.href;
 
-    if (isIngestable(tab.url)) {
-      const matches = await repository.findByNormalizedUrl(normalizeForDedupe(tab.url));
-      setExisting(matches[0] ?? null);
-    }
+    if (!isSelfAsTab && (!tabUrl || !isIngestable(tabUrl))) return openLibraryAndClose();
+    if (!tabUrl) return setReady(true);
+
+    setUrl(tabUrl);
+    setTitle(tab?.title ?? tabUrl);
+
+    const matches = await repository.findByNormalizedUrl(normalizeForDedupe(tabUrl));
+    setExisting(matches[0] ?? null);
     setReady(true);
   });
 
@@ -90,13 +115,10 @@ function Popup() {
     <div class="popup">
       <Show when={ready()} fallback={<div class="field__label">Loading…</div>}>
         {/*
-          No fallback. On a page that cannot be saved — a chrome:// page, the extension's
-          own tabs, the new tab page — the popup simply offers to open the library.
-
-          It used to explain why saving was unavailable, which read as an error report for
-          something the user had not asked for: opening the popup on chrome://extensions
-          right after installing announced a failure as the first thing the extension ever
-          said. The absent Save button is explanation enough.
+          Kept as a guard, though `ready` is now only set for a saveable page: an
+          unsaveable one redirects to the library in onMount and closes before rendering.
+          If that ever stops holding, rendering nothing beats rendering a Save form that
+          cannot work.
         */}
         <Show when={canSave()}>
           <Show when={existing()}>
