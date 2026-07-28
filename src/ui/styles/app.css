@@ -77,7 +77,7 @@ button {
   align-items: center;
   gap: var(--gap-sm);
   width: 100%;
-  height: 28px;
+  height: var(--control-h);
   padding: 0 var(--pane-pad);
   text-align: left;
   color: var(--fg-muted);
@@ -102,8 +102,8 @@ button {
 }
 
 .tag-dot {
-  width: 7px;
-  height: 7px;
+  width: calc(7px * var(--scale));
+  height: calc(7px * var(--scale));
   border-radius: 50%;
   background: var(--tag-color, var(--tag-slate));
   flex: none;
@@ -116,8 +116,8 @@ button {
  * shorter and dimmer because it is a refinement of the row above, not a peer of it.
  */
 .nav-item--child {
-  height: 24px;
-  padding-left: calc(var(--pane-pad) + 14px);
+  height: calc(24px * var(--scale));
+  padding-left: calc(var(--pane-pad) + 14px * var(--scale));
   color: var(--fg-faint);
 }
 
@@ -144,7 +144,7 @@ button {
 .search {
   flex: 1;
   min-width: 0;
-  height: 28px;
+  height: var(--control-h);
   padding: 0 var(--gap-sm);
   background: var(--bg);
   border: 1px solid var(--border);
@@ -156,7 +156,7 @@ button {
 .search:focus { border-color: var(--accent); outline: none; box-shadow: none; }
 
 .select {
-  height: 28px;
+  height: var(--control-h);
   padding: 0 var(--gap-xs);
   background: var(--bg);
   border: 1px solid var(--border);
@@ -165,8 +165,8 @@ button {
 }
 
 .btn {
-  height: 28px;
-  padding: 0 10px;
+  height: var(--control-h);
+  padding: 0 calc(10px * var(--scale));
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   background: var(--surface-raised);
@@ -215,8 +215,8 @@ button {
 .row[data-open='true'][aria-selected='true'] { background: var(--accent-soft); }
 
 .row__dot {
-  width: 6px;
-  height: 6px;
+  width: calc(6px * var(--scale));
+  height: calc(6px * var(--scale));
   border-radius: 50%;
   flex: none;
   background: transparent;
@@ -238,7 +238,7 @@ button {
 .row__domain {
   font: var(--text-sm) / 1 var(--font-mono);
   color: var(--fg-muted);
-  width: 148px;
+  width: calc(148px * var(--scale));
   flex: none;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -262,7 +262,12 @@ button {
   flex: none;
 }
 
-.favicon { width: 16px; height: 16px; flex: none; border-radius: 2px; }
+.favicon {
+  width: calc(16px * var(--scale));
+  height: calc(16px * var(--scale));
+  flex: none;
+  border-radius: calc(2px * var(--scale));
+}
 .favicon--fallback { background: var(--border); }
 
 /* ── tag chips ──────────────────────────────────────────────────────────────── */
@@ -270,10 +275,10 @@ button {
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 18px;
-  padding: 0 7px;
-  border-radius: 9px;
+  gap: calc(5px * var(--scale));
+  height: calc(18px * var(--scale));
+  padding: 0 calc(7px * var(--scale));
+  border-radius: calc(9px * var(--scale));
   background: var(--bg);
   border: 1px solid var(--border);
   font: var(--text-xs) / 1 var(--font-mono);
@@ -283,8 +288,8 @@ button {
 
 .chip::before {
   content: '';
-  width: 5px;
-  height: 5px;
+  width: calc(5px * var(--scale));
+  height: calc(5px * var(--scale));
   border-radius: 50%;
   background: var(--tag-color, var(--tag-slate));
 }
@@ -327,7 +332,7 @@ button {
 
 .notes {
   width: 100%;
-  min-height: 90px;
+  min-height: calc(90px * var(--scale));
   padding: var(--gap-sm);
   background: var(--bg);
   border: 1px solid var(--border);
@@ -380,7 +385,7 @@ button {
 
 kbd {
   font: var(--text-xs) / 1 var(--font-mono);
-  padding: 2px 4px;
+  padding: calc(2px * var(--scale)) calc(4px * var(--scale));
   border: 1px solid var(--border-strong);
   border-bottom-width: 2px;
   border-radius: 3px;
@@ -391,7 +396,7 @@ kbd {
 /* ── popup ──────────────────────────────────────────────────────────────────── */
 
 .popup {
-  width: 320px;
+  width: calc(320px * var(--scale));
   padding: var(--gap-md);
   display: flex;
   flex-direction: column;
@@ -407,7 +412,7 @@ kbd {
   color: var(--fg-faint);
 }
 .field__input {
-  height: 28px;
+  height: var(--control-h);
   padding: 0 var(--gap-sm);
   background: var(--bg);
   border: 1px solid var(--border);

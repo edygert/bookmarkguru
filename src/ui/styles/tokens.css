@@ -18,27 +18,46 @@
  */
 
 :root {
+  /*
+   * ── scale ──────────────────────────────────────────────────────────────────
+   *
+   * The single knob for how large the interface reads. **Every** size below is
+   * derived from it, and so are the control heights in app.css, so type and the
+   * boxes around it always grow together — scaling only the fonts gives you large
+   * text crammed into small controls.
+   *
+   * 1 is the original density, tuned for a desktop display. Higher suits a laptop
+   * or Chromebook panel, where the same CSS pixel is physically smaller.
+   *
+   * ⚠️ `--row-h` is read by `BookmarkList.tsx` at startup to do its windowing
+   * arithmetic. It reads this computed value rather than hardcoding one, so
+   * changing the scale here is enough — but the row must stay a *fixed* height.
+   * See gotcha #3.
+   */
+  --scale: 1.75;
+
   /* ── type ────────────────────────────────────────────────────────────────── */
   --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Menlo,
     Consolas, monospace;
 
-  --text-xs: 11px;
-  --text-sm: 12px;
-  --text-base: 13px;
-  --text-lg: 15px;
-  --text-xl: 19px;
+  --text-xs: calc(11px * var(--scale));
+  --text-sm: calc(12px * var(--scale));
+  --text-base: calc(13px * var(--scale));
+  --text-lg: calc(15px * var(--scale));
+  --text-xl: calc(19px * var(--scale));
 
   /* ── density ─────────────────────────────────────────────────────────────── */
-  --row-h: 34px;
-  --pane-pad: 12px;
-  --gap-xs: 4px;
-  --gap-sm: 8px;
-  --gap-md: 12px;
-  --gap-lg: 20px;
-  --radius: 4px;
-  --sidebar-w: 208px;
-  --detail-w: 320px;
+  --row-h: calc(34px * var(--scale));
+  --control-h: calc(28px * var(--scale));
+  --pane-pad: calc(12px * var(--scale));
+  --gap-xs: calc(4px * var(--scale));
+  --gap-sm: calc(8px * var(--scale));
+  --gap-md: calc(12px * var(--scale));
+  --gap-lg: calc(20px * var(--scale));
+  --radius: calc(4px * var(--scale));
+  --sidebar-w: calc(208px * var(--scale));
+  --detail-w: calc(320px * var(--scale));
 
   /* ── light ───────────────────────────────────────────────────────────────── */
   --bg: #fbfbfd;

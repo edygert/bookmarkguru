@@ -28,6 +28,10 @@ a link filed in one place becomes findable by any of its attributes.
 | Styling | Plain CSS + custom properties | Zero deps, one token file drives light/dark and density |
 | Virtual list | Hand-rolled (~45 lines) | See gotcha #3 |
 
+**UI scale lives in one token.** `--scale` in `tokens.css` drives every type size, control
+height, gap and pane width; `1` is the original desktop density. Change that one number and
+rebuild — do not scale fonts alone, or text outgrows the controls around it.
+
 Runtime deps: `solid-js`, `idb`, `minisearch`. That's it.
 
 ---
@@ -73,7 +77,14 @@ These each cost real debugging time. None were caught by `tsc`, vitest, or the b
    half-written library rather than as an obvious failure. `DB_VERSION` was not bumped
    (nothing was live yet); if you have an older database, clear it once.
 
-8. **The HTML importer cannot use `DOMParser`.** `src/core/` may not touch the DOM, so
+8. **Reading a custom property back gives you its *token text*, not a pixel value.**
+   `getPropertyValue('--row-h')` returns the literal string `calc(34px * 1.75)`, so
+   `parseFloat` yields `NaN`. Custom properties substitute lazily; only laying an element
+   out resolves them. `BookmarkList.tsx` measures a hidden probe element for exactly this
+   reason. Getting it wrong is silent — CSS drew 59.5 px rows while the windowing
+   arithmetic used a 34 px fallback, so rows overlapped and the scrollbar lied.
+
+9. **The HTML importer cannot use `DOMParser`.** `src/core/` may not touch the DOM, so
    `html-import.ts` parses Netscape HTML with regex over lines. That is not a compromise:
    the format is machine-generated, one tag per line, and `</DL>` counting is the only
    sound way to track depth since indentation is not reliable and `<DT>` has no close tag.
