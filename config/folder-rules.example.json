@@ -1,0 +1,37 @@
+{
+  "$comment": [
+    "Extra folder-name rules for import, on top of the generic ones in",
+    "src/core/io/folder-tags.ts. Copy this to folder-rules.json and edit.",
+    "",
+    "folder-rules.json is gitignored on purpose: the folder names in a real",
+    "bookmark tree are personal data. Client names, employers, course codes and",
+    "hobbies all end up in there, and none of it belongs in a repository.",
+    "",
+    "Generic rules ship in code and need no configuration: browser containers",
+    "(Bookmarks bar, Other bookmarks, Imported, New folder, Unsorted Bookmarks),",
+    "date-stamped folder names in three formats, and course-day dividers",
+    "(Day 1 / Day1). Everything below is for names only you would have.",
+    "",
+    "Matching is case-insensitive. Patterns are regular expressions.",
+    "",
+    "structural  filing containers that should not become tags",
+    "session     saved tab sets: not tags, and their contents import to the inbox",
+    "            rather than the library, since a tab dump is a triage queue"
+  ],
+
+  "structural": [
+    "Misc",
+    "Stuff",
+    "To Sort"
+  ],
+
+  "session": [
+    "Saved Tabs",
+    "Window Dump"
+  ],
+
+  "sessionPatterns": [
+    "^session ?\\d+$",
+    "^tab ?set ?\\d+$"
+  ]
+}

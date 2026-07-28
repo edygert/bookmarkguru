@@ -3,3 +3,14 @@ dist/
 *.log
 .DS_Store
 .vite/
+
+# Bookmark exports are personal data — real browsing history, and URLs that carry live
+# session identifiers (PHPSESSID, CFID/CFTOKEN). Never commit one. Test fixtures are
+# synthetic and live in scripts/fixtures/.
+bookmarks*.html
+*.bookmarks.html
+
+# Folder names from a real bookmark tree are personal data too — clients, employers,
+# course codes, hobbies. The import rules that reference them stay local; only the
+# generic rules and config/folder-rules.example.json are committed.
+config/folder-rules.json

@@ -17,3 +17,15 @@ export function newId(): string {
 export function tagIdFromName(name: string): string {
   return `tag:${name.trim().toLowerCase().replace(/\s+/g, '-')}`;
 }
+
+/**
+ * Id for a parent-qualified tag: `tag:p1` + `Shared` → `tag:p1/shared`.
+ *
+ * Used when one folder name appears under two different parents. Merging on name alone
+ * would fuse them, and nothing in the record would remember they had been fused — so
+ * import qualifies instead. The general tag is emitted as well, which is what keeps the
+ * broad grouping working.
+ */
+export function qualifiedTagId(parentId: string, name: string): string {
+  return `${parentId}/${name.trim().toLowerCase().replace(/\s+/g, '-')}`;
+}

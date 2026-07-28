@@ -61,7 +61,11 @@ export function upgrade(db: IDBPDatabase<BookmarkGuruDB>, oldVersion: number): v
     bookmarks.createIndex('tags', 'tags', { multiEntry: true });
 
     const tags = db.createObjectStore('tags', { keyPath: 'id' });
-    tags.createIndex('name', 'name', { unique: true });
+    // Deliberately NOT unique. Parent-qualified tags keep the plain name — the general
+    // tag and each of its qualified variants store the *same* name and are
+    // distinguished by id and `parent`. A unique index makes the second putTags throw
+    // ConstraintError and kills the import partway through.
+    tags.createIndex('name', 'name');
 
     db.createObjectStore('collections', { keyPath: 'id' });
     db.createObjectStore('savedSearches', { keyPath: 'id' });

@@ -2,6 +2,13 @@ import { createSignal, createMemo } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import { repository } from '~/core/db/idb-repository';
 import { chromeTreeToBookmarks } from '~/core/io/chrome-import';
+import { htmlToBookmarks } from '~/core/io/html-import';
+import type { ImportResult } from '~/core/io/ingest';
+import type { FolderRules } from '~/core/io/folder-tags';
+// Bundled at build time. The file is gitignored — folder names from a real tree are
+// personal data — and `npm run config` seeds it from the committed example, so a fresh
+// clone still builds. See config/folder-rules.example.json.
+import folderRules from '../../../config/folder-rules.json';
 import { openTabUrlSet } from '~/core/tabs/match';
 import { normalizeForMatch } from '~/core/normalize-url';
 import { runQuery } from '~/core/search/query';
@@ -115,15 +122,37 @@ async function refreshOpenTabs(): Promise<void> {
   setOpenUrls(openTabUrlSet(await chrome.tabs.query({})));
 }
 
+const EMPTY_SUMMARY: ImportSummary = {
+  added: 0, alreadySaved: 0, skipped: 0, tagsCreated: 0, inboxed: 0,
+};
+
 /**
  * One-directional migration from Chrome's bookmark tree. Runs in the page context,
  * not the worker, so a large import cannot be killed halfway by worker termination.
  */
+const rules: FolderRules = folderRules;
+
 async function importFromChrome(): Promise<ImportSummary> {
+  return runImport(async () =>
+    chromeTreeToBookmarks(await chrome.bookmarks.getTree(), { rules }));
+}
+
+/**
+ * Import an exported bookmarks HTML file.
+ *
+ * Same rules as the live path — they share `folder-tags.ts` and `ingest.ts` — but reading
+ * a file lets the same input be imported repeatedly while tag rules are being tuned,
+ * which a live tree that changes underneath you does not.
+ */
+async function importFromHtmlFile(file: File): Promise<ImportSummary> {
+  return runImport(async () => htmlToBookmarks(await file.text(), { rules }));
+}
+
+/** Shared write path: dedupe against the library, chunk the writes, refresh, broadcast. */
+async function runImport(produce: () => Promise<ImportResult>): Promise<ImportSummary> {
   setState('loading', true);
   try {
-    const tree = await chrome.bookmarks.getTree();
-    const { bookmarks, tags, summary } = chromeTreeToBookmarks(tree);
+    const { bookmarks, tags, summary } = await produce();
 
     // Anything already in the library wins; the import must not clobber edits.
     const existing = new Set(state.bookmarks.map((b) => b.normalizedUrl));
@@ -145,10 +174,11 @@ async function importFromChrome(): Promise<ImportSummary> {
       ...summary,
       added: fresh.length,
       alreadySaved: summary.alreadySaved + (bookmarks.length - fresh.length),
+      inboxed: fresh.filter((b) => b.status === 'inbox').length,
     };
   } catch (error) {
     setState({ loading: false, error: describe(error) });
-    return { added: 0, alreadySaved: 0, skipped: 0, tagsCreated: 0 };
+    return EMPTY_SUMMARY;
   }
 }
 
@@ -213,5 +243,6 @@ export const library = {
   query, filters, sort, selectedId,
   // writes
   setQuery, setFilters, setSort, setSelectedId,
-  load, watch, refreshOpenTabs, importFromChrome, activate, updateBookmark, removeBookmark,
+  load, watch, refreshOpenTabs, importFromChrome, importFromHtmlFile,
+  activate, updateBookmark, removeBookmark,
 };

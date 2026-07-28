@@ -1,12 +1,17 @@
 import { For, Show } from 'solid-js';
 import { library } from '../state/library';
 import { Favicon } from './Favicon';
-import type { Bookmark } from '~/core/types';
+import type { Bookmark, Tag } from '~/core/types';
 
 const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 
 function formatDate(ts: number | null): string {
   return ts === null ? 'Never' : dateFmt.format(ts);
+}
+
+/** The folder a qualified tag was kept separate under, if it is one. */
+function parentOf(tag: Tag): Tag | undefined {
+  return tag.parent === undefined ? undefined : library.tagsById().get(tag.parent);
 }
 
 export function DetailPane(props: { bookmark: Bookmark | undefined }) {
@@ -49,6 +54,13 @@ export function DetailPane(props: { bookmark: Bookmark | undefined }) {
                   <For each={tags()}>
                     {(tag) => (
                       <span class="chip" style={{ '--tag-color': `var(--tag-${tag.color})` }}>
+                        {/* A qualified tag names the folder it was kept separate under,
+                            so two same-named tags read differently from each other. */}
+                        <Show when={parentOf(tag)}>
+                          {(parent) => (
+                            <span class="chip__parent">{parent().name}</span>
+                          )}
+                        </Show>
                         {tag.name}
                       </span>
                     )}

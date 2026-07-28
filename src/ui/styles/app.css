@@ -109,6 +109,27 @@ button {
   flex: none;
 }
 
+/*
+ * A parent-qualified tag: one sense of a name that occurs under several parents.
+ * Indented under its general tag and drawn with a tree elbow rather than a colour dot —
+ * it shares the general tag's colour, so a second dot would only add noise. The row is
+ * shorter and dimmer because it is a refinement of the row above, not a peer of it.
+ */
+.nav-item--child {
+  height: 24px;
+  padding-left: calc(var(--pane-pad) + 14px);
+  color: var(--fg-faint);
+}
+
+.nav-item--child::before {
+  content: '└';
+  margin-right: 4px;
+  color: var(--fg-faint);
+  font: var(--text-xs) / 1 var(--font-mono);
+}
+
+.nav-item--child:hover { color: var(--fg-muted); }
+
 /* ── toolbar ────────────────────────────────────────────────────────────────── */
 
 .toolbar {
@@ -266,6 +287,19 @@ button {
   height: 5px;
   border-radius: 50%;
   background: var(--tag-color, var(--tag-slate));
+}
+
+/*
+ * The qualifying folder on a chip: "Tools · Web". Dimmed, because the tag is still
+ * "Web" — the prefix only says which Web, and must not compete with the name itself.
+ */
+.chip__parent {
+  color: var(--fg-faint);
+}
+
+.chip__parent::after {
+  content: '·';
+  margin: 0 3px;
 }
 
 /* ── detail pane ────────────────────────────────────────────────────────────── */
