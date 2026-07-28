@@ -176,7 +176,21 @@ button {
 
 .btn:hover { background: var(--hover); }
 .btn--primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
-.btn--primary:hover { filter: brightness(1.08); }
+
+/*
+ * `background` is restated here, and must be.
+ *
+ * `.btn:hover` is (0,2,0) while `.btn--primary` is only (0,1,0), so on hover the plain
+ * rule wins the background and repaints the primary button in `--hover` while its text
+ * stays `--accent-fg`. That is white-on-near-white in light mode and near-black-on-dark
+ * in dark mode — around 1.05:1 either way, i.e. invisible. `filter` alone cannot undo it,
+ * because there is nothing left to brighten.
+ */
+.btn--primary:hover {
+  background: var(--accent);
+  filter: brightness(1.08);
+}
+
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── list ───────────────────────────────────────────────────────────────────── */

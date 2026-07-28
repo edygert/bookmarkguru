@@ -89,18 +89,16 @@ function Popup() {
   return (
     <div class="popup">
       <Show when={ready()} fallback={<div class="field__label">Loading…</div>}>
-        <Show
-          when={canSave()}
-          fallback={
-            <div>
-              <div class="empty__title">Can't save this page</div>
-              <p class="empty__body">
-                Browser pages like <code>chrome://</code> can't be reopened reliably, so
-                they're not worth keeping.
-              </p>
-            </div>
-          }
-        >
+        {/*
+          No fallback. On a page that cannot be saved — a chrome:// page, the extension's
+          own tabs, the new tab page — the popup simply offers to open the library.
+
+          It used to explain why saving was unavailable, which read as an error report for
+          something the user had not asked for: opening the popup on chrome://extensions
+          right after installing announced a failure as the first thing the extension ever
+          said. The absent Save button is explanation enough.
+        */}
+        <Show when={canSave()}>
           <Show when={existing()}>
             <div class="field__label" style={{ color: 'var(--signal)' }}>
               Already saved — adding tags will update it

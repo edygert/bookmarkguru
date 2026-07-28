@@ -77,14 +77,20 @@ These each cost real debugging time. None were caught by `tsc`, vitest, or the b
    half-written library rather than as an obvious failure. `DB_VERSION` was not bumped
    (nothing was live yet); if you have an older database, clear it once.
 
-8. **Reading a custom property back gives you its *token text*, not a pixel value.**
+8. **A modifier class loses to the base class's `:hover`.** `.btn:hover` is (0,2,0) and
+   `.btn--primary` is only (0,1,0), so hovering a primary button repainted it in
+   `--hover` while its text stayed `--accent-fg` — white on near-white, about 1.05:1.
+   A `filter` on the hover rule cannot rescue it; the modifier must restate `background`
+   in its own `:hover`. Check any `--modifier` that sets a colour the base also sets.
+
+9. **Reading a custom property back gives you its *token text*, not a pixel value.**
    `getPropertyValue('--row-h')` returns the literal string `calc(34px * 1.75)`, so
    `parseFloat` yields `NaN`. Custom properties substitute lazily; only laying an element
    out resolves them. `BookmarkList.tsx` measures a hidden probe element for exactly this
    reason. Getting it wrong is silent — CSS drew 59.5 px rows while the windowing
    arithmetic used a 34 px fallback, so rows overlapped and the scrollbar lied.
 
-9. **The HTML importer cannot use `DOMParser`.** `src/core/` may not touch the DOM, so
+10. **The HTML importer cannot use `DOMParser`.** `src/core/` may not touch the DOM, so
    `html-import.ts` parses Netscape HTML with regex over lines. That is not a compromise:
    the format is machine-generated, one tag per line, and `</DL>` counting is the only
    sound way to track depth since indentation is not reliable and `<DT>` has no close tag.

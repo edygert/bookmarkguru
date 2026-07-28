@@ -34,7 +34,7 @@
    * changing the scale here is enough — but the row must stay a *fixed* height.
    * See gotcha #3.
    */
-  --scale: 1.75;
+  --scale: 1.5;
 
   /* ── type ────────────────────────────────────────────────────────────────── */
   --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, sans-serif;
