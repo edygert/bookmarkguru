@@ -18,7 +18,16 @@ export type Message =
    */
   | { kind: 'save-open-tabs' }
   /** Fan-out after a write, so other open surfaces refresh. Fire-and-forget. */
-  | { kind: 'bookmarks-changed'; ids: string[] };
+  | { kind: 'bookmarks-changed'; ids: string[] }
+  /**
+   * Fan-out after a tag was renamed, recoloured, created or deleted.
+   *
+   * Separate from `bookmarks-changed` because renaming a tag touches **no** bookmark
+   * record — that is the whole point of storing tag ids — and broadcasting a message
+   * named after records nothing wrote would be a lie the next reader has to disprove.
+   * Deleting a tag does both, and legitimately sends both.
+   */
+  | { kind: 'tags-changed' };
 
 export interface OpenOrSwitchResult {
   /** True when an existing tab was focused rather than a new one created. */
@@ -32,6 +41,7 @@ export interface ResultOf {
   'open-manager': { ok: true };
   'save-open-tabs': { ok: true };
   'bookmarks-changed': void;
+  'tags-changed': void;
 }
 
 /**

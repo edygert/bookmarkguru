@@ -10,6 +10,8 @@ import type { FolderRules } from '~/core/io/folder-tags';
 // clone still builds. See config/folder-rules.example.json.
 import folderRules from '../../../config/folder-rules.json';
 import { openTabUrlSet } from '~/core/tabs/match';
+import { colorForTag, findNameConflict, retag } from '~/core/tags';
+import { tagIdFromName } from '~/core/ids';
 import { tabsToBookmarks, windowOrdinals, type TabGroupLike } from '~/core/io/tabs-import';
 import { domainOf, isIngestable, normalizeForDedupe, normalizeForMatch } from '~/core/normalize-url';
 import { runQuery } from '~/core/search/query';
@@ -61,7 +63,7 @@ const [rawGroups, setRawGroups] = createSignal<readonly TabGroupLike[]>([]);
  * than one more filter because the tab view lists things that are *not records* — a
  * filter cannot surface a URL the database has never seen.
  */
-export type ViewKind = 'bookmarks' | 'tabs';
+export type ViewKind = 'bookmarks' | 'tabs' | 'tags';
 
 const [view, setView] = createSignal<ViewKind>('bookmarks');
 const [query, setQuery] = createSignal('');
@@ -69,6 +71,7 @@ const [filters, setFilters] = createStore<Filters>({ status: ['active'] });
 const [sort, setSort] = createSignal<SortSpec>({ field: 'createdAt', dir: 'desc' });
 const [selectedId, setSelectedId] = createSignal<string | null>(null);
 const [selectedTabId, setSelectedTabId] = createSignal<number | null>(null);
+const [selectedTagId, setSelectedTagId] = createSignal<string | null>(null);
 
 const tagNames = createMemo(() => new Map(state.tags.map((t) => [t.id, t.name])));
 const tagsById = createMemo(() => new Map(state.tags.map((t) => [t.id, t])));
@@ -119,6 +122,90 @@ const tagCounts = createMemo(() => {
     for (const id of b.tags) counts.set(id, (counts.get(id) ?? 0) + 1);
   }
   return counts;
+});
+
+/** Records carrying a tag, split by status. See `tagUsage` for why the split matters. */
+export interface TagUsage {
+  active: number;
+  inbox: number;
+  archived: number;
+  total: number;
+}
+
+const EMPTY_USAGE: TagUsage = { active: 0, inbox: 0, archived: 0, total: 0 };
+
+/**
+ * How many records each tag is on, **across every status**.
+ *
+ * Deliberately not `tagCounts`, which counts active records only because it sits beside a
+ * sidebar control that filters the library. This one sits beside Delete, which strips the
+ * tag from inbox and archived records too — so reusing the filter's count would understate
+ * what deleting costs, in a browser where the inbox is exactly where untriaged captures
+ * pile up. A count next to a control has to be the count that control produces.
+ *
+ * Seeded from `state.tags` so a tag on zero records still has an entry: those are precisely
+ * the ones the sidebar hides and the tag view has to show.
+ */
+const tagUsage = createMemo(() => {
+  const usage = new Map<string, TagUsage>();
+  for (const tag of state.tags) {
+    usage.set(tag.id, { active: 0, inbox: 0, archived: 0, total: 0 });
+  }
+
+  for (const b of state.bookmarks) {
+    for (const id of b.tags) {
+      const entry = usage.get(id);
+      // A tag id with no tag record. Nothing renders it, so counting it would produce a
+      // total no view can account for.
+      if (!entry) continue;
+      entry[b.status]++;
+      entry.total++;
+    }
+  }
+  return usage;
+});
+
+/** One row of the tag view. `parent` is resolved so the row can render `P1 · SHARED`. */
+export interface TagRow {
+  tag: Tag;
+  parent: Tag | undefined;
+  usage: TagUsage;
+}
+
+/**
+ * Every tag, narrowed by the toolbar search box — the same box and the same signal the
+ * bookmark and tab views use, so one search covers all three.
+ *
+ * Matches the qualifying parent's name as well as the tag's own, because a qualified tag
+ * shows as `P1 · SHARED` and searching for what you can see should find it.
+ */
+const visibleTags = createMemo<TagRow[]>(() => {
+  const usage = tagUsage();
+  const byId = tagsById();
+  const needle = query().trim().toLowerCase();
+
+  const rows = state.tags.map((tag) => ({
+    tag,
+    parent: tag.parent === undefined ? undefined : byId.get(tag.parent),
+    usage: usage.get(tag.id) ?? EMPTY_USAGE,
+  }));
+
+  const matched = needle
+    ? rows.filter(
+        (row) =>
+          row.tag.name.toLowerCase().includes(needle) ||
+          (row.parent?.name.toLowerCase().includes(needle) ?? false),
+      )
+    : rows;
+
+  return matched.sort(
+    (a, b) => b.usage.total - a.usage.total || a.tag.name.localeCompare(b.tag.name),
+  );
+});
+
+const selectedTag = createMemo(() => {
+  const id = selectedTagId();
+  return id ? state.tags.find((t) => t.id === id) : undefined;
 });
 
 /**
@@ -300,7 +387,7 @@ async function runImport(produce: () => Promise<ImportResult>): Promise<ImportSu
     const existing = new Set(state.bookmarks.map((b) => b.normalizedUrl));
     const fresh = bookmarks.filter((b) => !existing.has(b.normalizedUrl));
 
-    const mergedTags = mergeTags(state.tags, tags);
+    const mergedTags = unionTags(state.tags, tags);
     await repository.putTags(mergedTags);
 
     // Chunked so one enormous transaction cannot stall the UI thread.
@@ -405,6 +492,121 @@ function patchLocal(id: string, patch: Partial<Bookmark>): void {
   );
 }
 
+// ── tags ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Rename a tag. **No bookmark record is written** — records hold tag ids, which is the
+ * entire reason they hold ids rather than names.
+ *
+ * The id keeps whatever text it was derived from (`tag:tools` can end up displaying
+ * "Rust"). That is invisible — ids are never shown — and it is what makes a later
+ * re-import of the folder `Tools` feed this renamed tag instead of resurrecting a
+ * duplicate beside it, since import joins on id.
+ *
+ * Returns the tag it would have become indistinguishable from, when there is one. Merging
+ * is out of scope, so the rename is refused rather than silently creating two identical
+ * rows the user cannot tell apart afterwards.
+ */
+async function renameTag(id: string, name: string): Promise<{ ok: boolean; conflict?: string }> {
+  const current = state.tags.find((t) => t.id === id);
+  const clean = name.trim();
+  if (!current || !clean || clean === current.name) return { ok: true };
+
+  const conflict = findNameConflict(state.tags, id, clean);
+  if (conflict) return { ok: false, conflict: conflict.name };
+
+  setState('tags', (t) => t.id === id, 'name', clean);
+  await repository.putTag({ ...unwrap(current), name: clean });
+  broadcast({ kind: 'tags-changed' });
+  return { ok: true };
+}
+
+async function setTagColor(id: string, color: string): Promise<void> {
+  const current = state.tags.find((t) => t.id === id);
+  if (!current || current.color === color) return;
+
+  setState('tags', (t) => t.id === id, 'color', color);
+  await repository.putTag({ ...unwrap(current), color });
+  broadcast({ kind: 'tags-changed' });
+}
+
+/**
+ * Create a tag, or hand back the existing one that name already resolves to.
+ *
+ * Ids derive from the name, so "Rust" typed by hand and a folder named `Rust` are one tag
+ * by construction. Returning the existing record rather than writing over it keeps a
+ * rename intact: typing the *old* name attaches the tag you renamed, it does not reset it.
+ */
+async function createTag(name: string, color?: string): Promise<Tag | undefined> {
+  const clean = name.trim();
+  if (!clean) return undefined;
+
+  const id = tagIdFromName(clean);
+  const existing = state.tags.find((t) => t.id === id);
+  if (existing) return unwrap(existing);
+
+  const tag: Tag = { id, name: clean, color: color ?? colorForTag(clean) };
+  setState('tags', (list) => [...list, tag]);
+  await repository.putTag(tag);
+  broadcast({ kind: 'tags-changed' });
+  return tag;
+}
+
+/**
+ * Delete a tag and strip it from every record that carries it. **No bookmark is deleted.**
+ *
+ * Two things are load-bearing here:
+ *
+ * - **`unwrap` before `retag`.** These records come out of the Solid store, so they are
+ *   proxies, and `retag` spreads one level — nested `tags` and `source` would stay
+ *   proxied and IndexedDB would throw `"[object Array] could not be cloned"` on the write.
+ *   That failure is near-silent: the UI has already repainted. This is the third time this
+ *   boundary has bitten; see the gotchas in PROGRESS.md.
+ * - **Records first, tag record last.** A failure between the two leaves records carrying
+ *   a tag that still exists, which is merely untidy. The reverse leaves ids pointing at a
+ *   deleted tag: no chip renders them and no filter matches them, so the tag is gone from
+ *   view while still costing every record a slot.
+ */
+async function deleteTag(id: string): Promise<number> {
+  const tag = state.tags.find((t) => t.id === id);
+  if (!tag) return 0;
+
+  const changed = retag(unwrap(state.bookmarks), id, null);
+
+  // Chunked for the same reason an import is: one transaction over a few thousand
+  // records stalls the UI thread.
+  for (let i = 0; i < changed.length; i += 500) {
+    await repository.putMany(changed.slice(i, i + 500));
+  }
+  await repository.removeTag(id);
+
+  setState('tags', (list) => list.filter((t) => t.id !== id));
+  for (const record of changed) patchLocal(record.id, { tags: record.tags, updatedAt: record.updatedAt });
+
+  // A filter pointing at a tag that no longer exists shows an empty list under a sidebar
+  // row that is also gone — nothing on screen would explain where the records went.
+  const active = filters.tags ?? [];
+  if (active.includes(id)) setFilters('tags', active.filter((t) => t !== id));
+  if (selectedTagId() === id) setSelectedTagId(null);
+
+  broadcast({ kind: 'tags-changed' });
+  if (changed.length > 0) broadcast({ kind: 'bookmarks-changed', ids: changed.map((b) => b.id) });
+  return changed.length;
+}
+
+async function addTagToBookmark(bookmarkId: string, tagId: string): Promise<void> {
+  const current = state.bookmarks.find((b) => b.id === bookmarkId);
+  if (!current || current.tags.includes(tagId)) return;
+  // Spreading a proxied array of *strings* is safe — the elements are primitives.
+  await updateBookmark(bookmarkId, { tags: [...current.tags, tagId] });
+}
+
+async function removeTagFromBookmark(bookmarkId: string, tagId: string): Promise<void> {
+  const current = state.bookmarks.find((b) => b.id === bookmarkId);
+  if (!current || !current.tags.includes(tagId)) return;
+  await updateBookmark(bookmarkId, { tags: current.tags.filter((id) => id !== tagId) });
+}
+
 /**
  * ⚠️ `existing` comes out of the Solid store, so every element is a **proxy**.
  *
@@ -416,7 +618,7 @@ function patchLocal(id: string, patch: Partial<Bookmark>): void {
  * import runs against an empty store, so `existing` is `[]` and nothing proxied is ever
  * handed to IndexedDB.
  */
-function mergeTags(existing: readonly Tag[], incoming: readonly Tag[]): Tag[] {
+function unionTags(existing: readonly Tag[], incoming: readonly Tag[]): Tag[] {
   const byId = new Map(existing.map((t) => [t.id, { ...t }]));
   for (const tag of incoming) if (!byId.has(tag.id)) byId.set(tag.id, tag);
   return [...byId.values()];
@@ -440,6 +642,25 @@ function showStatus(status: BookmarkStatus): void {
 
 function showTabs(): void {
   setView('tabs');
+}
+
+function showTags(): void {
+  setView('tags');
+}
+
+/**
+ * Jump from a tag to the records that carry it.
+ *
+ * The bridge between managing tags and using them: before removing a tag you want to see
+ * what is on it, and the Library is where that lives. Statuses are widened to all three
+ * because the tag view counts all three — landing on a filter that hides two thirds of the
+ * records you were just shown a count for is the same class of fault as counting the wrong
+ * thing in the first place.
+ */
+function showRecordsForTag(id: string): void {
+  setView('bookmarks');
+  setQuery('');
+  setFilters({ status: ['active', 'inbox', 'archived'], tags: [id] });
 }
 
 /** Selecting a tab shows its record in the detail pane, when it has one. */
@@ -470,7 +691,7 @@ function watch(): void {
   }
 
   chrome.runtime.onMessage.addListener((message) => {
-    if (message?.kind === 'bookmarks-changed') void load();
+    if (message?.kind === 'bookmarks-changed' || message?.kind === 'tags-changed') void load();
   });
 }
 
@@ -480,10 +701,13 @@ export const library = {
   visible, selected, statusCounts, tagCounts, tagsById, tagNames, openUrls, isOpen,
   query, filters, sort, selectedId, view, openNowCount,
   openTabs, visibleTabs, unsavedTabCount, selectedTabId,
+  tagUsage, visibleTags, selectedTag, selectedTagId,
   // writes
-  setQuery, setFilters, setSort, setSelectedId,
-  showStatus, showTabs, selectTab,
+  setQuery, setFilters, setSort, setSelectedId, setSelectedTagId,
+  showStatus, showTabs, showTags, showRecordsForTag, selectTab,
   load, watch, refreshOpenTabs, importFromChrome, importFromHtmlFile,
   saveTabs, saveAllOpenTabs, focusTab,
   activate, updateBookmark, removeBookmark,
+  renameTag, setTagColor, createTag, deleteTag,
+  addTagToBookmark, removeTagFromBookmark,
 };

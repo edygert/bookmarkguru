@@ -17,6 +17,7 @@ rather than by `tsc`, vitest, or the build:
 | Second write threw "could not be cloned" | Handing a Solid store proxy to IndexedDB; both are valid types, and the first import never hits it |
 | Tab count shown on a bookmark filter | Both are integers — nothing static can tell "171 tabs" from "171 matches" |
 | Status edits never reached IndexedDB | A one-level spread left nested store proxies behind; the UI showed the new value and the write threw silently |
+| A renamed qualified tag vanished from the sidebar | Nesting was joined on the tag's *name*; correct types, and no test could see it until rename existed |
 
 ## Running
 
@@ -27,6 +28,7 @@ node scripts/e2e/import-test.mjs
 node scripts/e2e/switch-test.mjs
 node scripts/e2e/popup-panel-test.mjs
 node scripts/e2e/tabs-test.mjs
+node scripts/e2e/tags-crud-test.mjs
 node scripts/e2e/triage-test.mjs
 ```
 
@@ -41,6 +43,12 @@ open.
 its own and narrows to them with the search box, so it does not disturb anything the
 others rely on — but a script that destroys data has no business running ahead of ones
 that count it.
+
+`tags-crud-test` sits just before it, for a weaker version of the same reason: it deletes
+a *tag*, not a record. It seeds its own record and its own tags, and reads raw tag **ids**
+back out of IndexedDB rather than going through `READ_DB`, which resolves ids to names —
+that mapping is exactly what a rename changes, so reading through it would make the claim
+"renaming rewrote no bookmark record" unfalsifiable.
 
 Override defaults with `BG_PORT`, `BG_EXT_ID`, `BG_BROWSER`.
 

@@ -335,6 +335,11 @@ button {
 
 .row__meta--saved { font-style: italic; }
 
+/* A tag row. Like a tab row it is not itself clickable-to-open, and a tag on no records
+   is dimmed rather than hidden — this list is the only surface that can reach one. */
+.row--tag { cursor: default; }
+.row--tag[data-unused='true'] .row__title { color: var(--fg-faint); }
+
 .row__action {
   height: calc(20px * var(--scale));
   padding: 0 calc(8px * var(--scale));
@@ -391,6 +396,108 @@ button {
 .chip__parent::after {
   content: '·';
   margin: 0 3px;
+}
+
+/* A chip's remove control. Only rendered on the record's own tags, where taking a tag
+   off is a per-record edit rather than a change to the tag itself. */
+.chip__remove {
+  border: 0;
+  background: none;
+  padding: 0;
+  margin-left: calc(2px * var(--scale));
+  color: var(--fg-faint);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+}
+.chip__remove:hover { color: var(--danger); }
+
+/* ── tag editor ─────────────────────────────────────────────────────────────── */
+
+.swatches { display: flex; gap: var(--gap-xs); flex-wrap: wrap; }
+
+.swatch {
+  width: calc(20px * var(--scale));
+  height: calc(20px * var(--scale));
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--tag-color, var(--tag-slate));
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: pointer;
+}
+
+.swatch:hover { box-shadow: 0 0 0 1px var(--fg-faint); }
+
+/* The ring sits outside a surface-coloured border so it reads as a selection on any
+   swatch colour, including the ones close to the accent. */
+.swatch[aria-pressed='true'] {
+  border-color: var(--surface);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.tag-editor__name { width: 100%; }
+
+.detail__tag-input { width: 100%; margin-top: var(--gap-sm); }
+
+.suggestions {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--gap-xs);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.suggestion {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  height: var(--control-h);
+  padding: 0 var(--gap-sm);
+  border: 0;
+  background: var(--surface);
+  color: var(--fg-muted);
+  font: var(--text-sm) / 1 var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.suggestion:hover { background: var(--hover); color: var(--fg); }
+.suggestion__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The count is why this list is worth showing: it says which of two similar tags is the
+   one already in use. */
+.suggestion__count {
+  font: var(--text-xs) / 1 var(--font-mono);
+  color: var(--fg-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.field__hint { margin: var(--gap-xs) 0 0; font-size: var(--text-xs); color: var(--fg-faint); }
+.field__error { margin: var(--gap-xs) 0 0; font-size: var(--text-xs); color: var(--danger); }
+.field__input[aria-invalid='true'] { border-color: var(--danger); }
+
+.detail__section .btn + .btn { margin-left: var(--gap-sm); }
+
+/*
+ * A primed delete: outlined in danger rather than filled with it. A solid fill would need
+ * a foreground colour that works over both themes' `--danger`, and the dark theme's is a
+ * light red that white text fails against — the same near-invisible-contrast fault as
+ * gotcha #8, arrived at from the other direction.
+ *
+ * `background` is restated in the `:hover` rule because `.btn:hover` sets it at equal
+ * specificity; a modifier that declares only its resting colour loses on hover.
+ */
+.tag-editor__delete[data-confirming='true'] {
+  background: var(--surface);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.tag-editor__delete[data-confirming='true']:hover {
+  background: var(--hover);
+  color: var(--danger);
 }
 
 /* ── detail pane ────────────────────────────────────────────────────────────── */

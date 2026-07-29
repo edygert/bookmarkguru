@@ -114,6 +114,10 @@ These each cost real debugging time. None were caught by `tsc`, vitest, or the b
    by `triage-test.mjs`, which reads status back out of IndexedDB rather than trusting
    the DOM — every DOM assertion around it passed.
 
+   The import-time union that first hit this is now called `unionTags`, renamed away from
+   `mergeTags` when tag editing landed beside it — it unions ids on import and has nothing
+   to do with merging two tags together.
+
 12. **A count next to a control must be the count that control produces.** The sidebar
    used to show `openUrls().size` — the number of open browser *tabs* — beside a control
    that filtered *bookmarks*, so it read "171" and delivered an empty list. Both are
@@ -121,6 +125,19 @@ These each cost real debugging time. None were caught by `tsc`, vitest, or the b
    `openNowCount` runs the real query pipeline with `openNow` forced on rather than
    counting something adjacent. The same rule is why the capture button's count excludes
    browser-internal tabs and dedupes by normalized URL: it promises records added.
+
+   The tag view is the second instance: it needed `tagUsage`, an **all-status** count,
+   because it sits beside a Delete that strips the tag from inbox and archived records
+   too. Reusing the sidebar's `tagCounts` would have understated what deleting costs.
+
+13. **Anything derived from a tag's *name* breaks the moment renaming ships.** The sidebar
+   found a qualified tag's general form with `tagIdFromName(tag.name)`, which held only
+   because import generates both names from the same folder. Rename one and the row does
+   not move — it **vanishes**: the tag still has a `parent`, so it is excluded from the
+   roots, and no root's id matches its new name any more. Ids never change, so
+   `generalTagId()` derives it from the id instead. The same rule is why a tag's id keeps
+   its original text (`tag:tools` can display "Rust") — ids are identity, names are
+   display, and the moment those two are conflated a rename starts rewriting records.
 
 ---
 
@@ -169,7 +186,7 @@ src/
   core/                     ← NO Solid, NO DOM, NO chrome.*
     types.ts                Bookmark, BookmarkStatus, Tag, Collection, SavedSearch
     normalize-url.ts        the two normalizations + isIngestable + domainOf
-    tags.ts                 TagCollector, colour mapping
+    tags.ts                 TagCollector, colour mapping, generalTagId, retag
     db/                     schema.ts · repository.ts (interface) · idb-repository.ts
     search/query.ts         text → filter → sort pipeline (substring today)
     tabs/match.ts           extensible matching strategy list
@@ -183,7 +200,8 @@ src/
   ui/
     App.tsx                 shared shell; `compact` collapses to one column
     state/library.ts        the ONLY place Solid meets the repository
-    components/             Sidebar · VirtualList · BookmarkList · TabList · DetailPane · …
+    components/             Sidebar · VirtualList · BookmarkList · TabList · TagList ·
+                            DetailPane · TagDetail · …
     styles/tokens.css       design tokens — read the header comment
     manager|panel|popup .html/.tsx
 ```
@@ -208,8 +226,8 @@ Two deliberate choices carry the identity; both are documented in `tokens.css`.
 
 ```bash
 npm install
-npm run check          # isolation → permissions → tsc → 130 tests → build → CSP
-npm run e2e            # build, launch headless browser, run 58 browser assertions
+npm run check          # isolation → permissions → tsc → 144 tests → build → CSP
+npm run e2e            # build, launch headless browser, run 84 browser assertions
 npm run build          # → dist/, load unpacked at chrome://extensions
 npm run dev            # Vite + HMR
 npm run tags:preview -- <export.html>   # what an import would produce. Writes nothing.
@@ -242,6 +260,7 @@ active view does not belong there, and putting one there was a real bug worth re
 |---|---|---|
 | Library · Inbox · Archive | view | `status` is one field per record, so these partition the library |
 | Open tabs | view | lists **tabs**, including ones that are not records at all |
+| Tags | view | lists **tags**, including ones on no records at all |
 | Open now | filter, in the toolbar | narrows whichever view is active |
 
 **Why `Open now` moved.** It sat among the three status views, styled identically, while
@@ -255,6 +274,12 @@ an empty list. See gotcha #12.
 the database has never seen, and the interesting tabs are exactly the unsaved ones. The
 view lists every open tab across every window, marks the ones already in the library, and
 offers to capture the rest.
+
+**Why `Tags` is a view and not a filter.** Same reason, one level up. The sidebar's tag
+list shows only tags with at least one active record, because it exists to *pick a
+filter* — and no filter over the library can reach a tag on zero records. Take the last
+record off a tag and it would exist in IndexedDB with no surface able to rename or delete
+it. The view lists every tag, marks the unused ones, and is where they get cleaned up.
 
 ### Capturing tabs
 
@@ -437,11 +462,7 @@ Roughly in order:
    `core/search/index-builder.ts`, pass a `scores` map into the existing `runQuery` —
    the pipeline already accepts one and already handles relevance sort. Cache the
    serialized index in the `meta` store so cold start hydrates instead of reindexing.
-2. **Tag CRUD** — rename, recolour, merge, delete. Bookmarks store tag *ids*, so renaming
-   must not rewrite records. **Merge is the important one**: import deliberately
-   over-produces qualified tags (see Tier 2 above) and leaves collapsing them to this UI,
-   where the user can see what is being combined. Merge must be user-driven, never
-   inferred.
+2. ~~**Tag CRUD.**~~ **Done, without merge.** See "Tag editing" below.
 3. **Filter sidebar** — domain filter, favourites, multi-tag any/all. `Filters` already
    supports all of it; the UI does not expose it yet.
 4. **Favicons** — `Favicon.tsx` exists and works; wire it into more surfaces.
@@ -454,6 +475,64 @@ Roughly in order:
 
 Phases 3–4 (collections, saved searches, dedupe review, HTML/JSON export) are in
 `~/.claude/plans/create-a-plan-for-compressed-beaver.md`.
+
+---
+
+## Tag editing
+
+**Shipped.** Rename, recolour, delete, and per-record add/remove. The `Tags` view holds
+the list; the pane the bookmark detail normally occupies holds the editor.
+
+### There is deliberately no merge
+
+The roadmap promised one. It is not needed, and the reason is a property of how import
+works: **a qualified tag is always emitted alongside its general form**, so a record
+tagged `P1 · SHARED` already carries `SHARED` too. Deleting the redundant qualified tag
+therefore loses nothing — the broad grouping survives, because it was never routed through
+the qualified tag in the first place.
+
+That covers the case import over-produces, which is the case the merge UI existed for.
+What merge would still buy is folding together two tags that were created independently
+and happen to mean the same thing — and import cannot generate that pair, since ids derive
+from names. It is a one-way door with no undo behind it, so it stays unbuilt until
+something actually needs it.
+
+### Renaming writes no bookmark record
+
+`Bookmark.tags` holds ids; a rename touches one field on one tag record. Two consequences:
+
+- **A tag's id keeps its original text.** `tag:tools` can display "Rust". That is invisible
+  — ids are never shown — and it is what makes a later re-import of the folder `Tools` feed
+  the renamed tag rather than resurrecting a duplicate beside it, since import joins on id.
+- **A rename onto a name already in use is refused, not merged.** The check is scoped to
+  tags with the same `parent`: qualified variants deliberately share a name with their
+  general form and with each other (gotcha #7), and they are still told apart on screen,
+  because a qualified tag renders behind its parent's name. What is genuinely unusable is
+  two tags that render identically, and with no merge there is nothing to offer instead.
+
+### Deleting is guarded by its own count, not by a dialog
+
+Delete strips the tag from every record and removes the tag. **No bookmark is deleted.**
+It takes two clicks, and the second one's label carries the number of links it will touch —
+there is no undo anywhere in this app, and that number is the whole decision. Consistent
+with triage's stance that a well-placed control needs no modal, and with its reason for
+gating `Delete` at all: archiving is reversible, this is not.
+
+Order matters: **records first, tag record last.** A failure between the two leaves records
+carrying a tag that still exists, which is untidy. The reverse leaves ids pointing at a
+deleted tag — no chip renders them and no filter matches them, so the tag is invisible
+while still occupying a slot on every record.
+
+Deleting a general tag does **not** cascade to its qualified children. They are promoted to
+roots in the sidebar and labelled with their qualifying folder, so an orphan is visible and
+fixable rather than silently unrenderable.
+
+### Adding a tag by hand cannot mint a duplicate
+
+The detail pane's add-tag box offers existing tags with their record counts — so you attach
+the one already in use rather than a near-duplicate — and a `Create` option only when the
+typed name resolves to no existing id. Since ids derive from names, "Rust" typed by hand
+and a folder named `Rust` are the same tag by construction.
 
 ---
 
@@ -530,12 +609,15 @@ describe what that control does *here*.
   survivable because deleting is reachable only from the Archive, by a key that does
   nothing anywhere else, over records that had to be archived first — see "Triage" above.
   Archiving, the act you actually repeat, is reversible with `r`.
-- No tag CRUD, so a qualified tag that turns out to be redundant cannot
-  be merged away yet. Import over-produces on purpose; the merge UI is the other half.
-- Sidebar shows status views, the open-tabs view and tags; domain/favourite filters are
-  not exposed.
-- The open-tabs view is manager-only. The side panel has no sidebar, so it cannot reach
-  it — the panel keeps the `Open now` toggle but not the tab list.
+- **No tag merge**, deliberately — see "Tag editing". A qualified tag that turns out to be
+  redundant is *deleted*, which is safe because import emits its general form alongside it.
+  Two independently-created tags meaning the same thing cannot be folded together.
+- Sidebar shows status views, the open-tabs view, the tags view and tags; domain/favourite
+  filters are not exposed.
+- The open-tabs and tags views are manager-only. The side panel has no sidebar, so it
+  cannot reach either — the panel keeps the `Open now` toggle but not the lists.
+- Tag editing has no bulk actions and no undo. Deleting a tag off several hundred records
+  is one click away from irreversible; the count on the button is the only guard.
 - Triage has no bulk actions: it is one record per keystroke by design. Emptying a
   thousand-record inbox is a thousand keystrokes.
 - No collections, saved searches, bulk actions, or dedupe review UI yet.
