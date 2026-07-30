@@ -1,4 +1,4 @@
-import type { Bookmark, Collection, SavedSearch, Tag } from '../types';
+import type { Bookmark, Tag } from '../types';
 
 /**
  * The storage seam.
@@ -30,20 +30,13 @@ export interface BookmarkRepository {
   putTags(tags: Tag[]): Promise<void>;
   removeTag(id: string): Promise<void>;
 
-  // ── collections ──────────────────────────────────────────────────────────────
-  getCollections(): Promise<Collection[]>;
-  putCollection(collection: Collection): Promise<void>;
-  removeCollection(id: string): Promise<void>;
-
-  // ── saved searches ───────────────────────────────────────────────────────────
-  getSavedSearches(): Promise<SavedSearch[]>;
-  putSavedSearch(savedSearch: SavedSearch): Promise<void>;
-  removeSavedSearch(id: string): Promise<void>;
-
   // ── meta ─────────────────────────────────────────────────────────────────────
   getMeta<T>(key: string): Promise<T | undefined>;
   setMeta<T>(key: string, value: T): Promise<void>;
 
-  /** Drop every record. Used by restore-from-backup and by tests. */
+  /**
+   * Drop every record, `meta` included — so a caller that wipes in order to write
+   * something back has to re-set the first-run marker. Used by restore-from-backup.
+   */
   clearAll(): Promise<void>;
 }

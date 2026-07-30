@@ -1,5 +1,5 @@
 import { openDB, type IDBPDatabase } from 'idb';
-import type { Bookmark, Collection, SavedSearch, Tag } from '../types';
+import type { Bookmark, Tag } from '../types';
 import type { BookmarkRepository } from './repository';
 import { DB_NAME, DB_VERSION, upgrade, type BookmarkGuruDB } from './schema';
 
@@ -103,34 +103,6 @@ export class IdbRepository implements BookmarkRepository {
     await (await this.#open()).delete('tags', id);
   }
 
-  // ── collections ──────────────────────────────────────────────────────────────
-
-  async getCollections(): Promise<Collection[]> {
-    return (await this.#open()).getAll('collections');
-  }
-
-  async putCollection(collection: Collection): Promise<void> {
-    await (await this.#open()).put('collections', collection);
-  }
-
-  async removeCollection(id: string): Promise<void> {
-    await (await this.#open()).delete('collections', id);
-  }
-
-  // ── saved searches ───────────────────────────────────────────────────────────
-
-  async getSavedSearches(): Promise<SavedSearch[]> {
-    return (await this.#open()).getAll('savedSearches');
-  }
-
-  async putSavedSearch(savedSearch: SavedSearch): Promise<void> {
-    await (await this.#open()).put('savedSearches', savedSearch);
-  }
-
-  async removeSavedSearch(id: string): Promise<void> {
-    await (await this.#open()).delete('savedSearches', id);
-  }
-
   // ── meta ─────────────────────────────────────────────────────────────────────
 
   async getMeta<T>(key: string): Promise<T | undefined> {
@@ -144,7 +116,7 @@ export class IdbRepository implements BookmarkRepository {
 
   async clearAll(): Promise<void> {
     const db = await this.#open();
-    const stores = ['bookmarks', 'tags', 'collections', 'savedSearches', 'meta'] as const;
+    const stores = ['bookmarks', 'tags', 'meta'] as const;
     const tx = db.transaction(stores, 'readwrite');
     await Promise.all([...stores.map((s) => tx.objectStore(s).clear()), tx.done]);
   }

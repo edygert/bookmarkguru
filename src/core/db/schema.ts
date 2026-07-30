@@ -1,7 +1,13 @@
 import type { DBSchema, IDBPDatabase } from 'idb';
-import type { Bookmark, Collection, SavedSearch, Tag } from '../types';
+import type { Bookmark, Tag } from '../types';
 
 export const DB_NAME = 'bookmarkguru';
+
+/**
+ * Not bumped when the `collections` and `savedSearches` stores were removed — nothing was
+ * live, so a migration block would have been fiction. Same call as the tags-index fix:
+ * if you have a database from before that, clear it once.
+ */
 export const DB_VERSION = 1;
 
 /** Bumped independently of DB_VERSION; written into JSON backups for restore validation. */
@@ -33,14 +39,6 @@ export interface BookmarkGuruDB extends DBSchema {
     value: Tag;
     indexes: { name: string };
   };
-  collections: {
-    key: string;
-    value: Collection;
-  };
-  savedSearches: {
-    key: string;
-    value: SavedSearch;
-  };
   /** Settings, serialized search index, first-run marker. */
   meta: {
     key: string;
@@ -67,8 +65,6 @@ export function upgrade(db: IDBPDatabase<BookmarkGuruDB>, oldVersion: number): v
     // ConstraintError and kills the import partway through.
     tags.createIndex('name', 'name');
 
-    db.createObjectStore('collections', { keyPath: 'id' });
-    db.createObjectStore('savedSearches', { keyPath: 'id' });
     db.createObjectStore('meta', { keyPath: 'key' });
   }
 }

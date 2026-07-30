@@ -72,6 +72,44 @@ button {
   margin-bottom: var(--gap-sm);
 }
 
+/*
+ * Backup and restore. Stacked full-width buttons rather than `nav-item` rows, because
+ * these are not views — nothing in this group replaces the list or narrows it, and
+ * anything wearing `nav-item` in this pane reads as something you can select.
+ */
+.sidebar__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+  padding: 0 var(--pane-pad);
+}
+
+.sidebar__actions .btn { width: 100%; }
+
+/* The file input is replaced by its own label; only keyboard focus needs to reach it. */
+.sidebar__file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+.sidebar__file-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  /* Shows the chosen filename, which can be far wider than this pane. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar__file:focus-visible + .sidebar__file-label { border-color: var(--accent); }
+
+.sidebar__note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--fg-faint);
+  overflow-wrap: anywhere;
+}
+
+.sidebar__note[data-error='true'] { color: var(--danger); }
+
 .nav-item {
   display: flex;
   align-items: center;
@@ -489,13 +527,13 @@ button {
  * `background` is restated in the `:hover` rule because `.btn:hover` sets it at equal
  * specificity; a modifier that declares only its resting colour loses on hover.
  */
-.tag-editor__delete[data-confirming='true'] {
+.btn[data-confirming='true'] {
   background: var(--surface);
   border-color: var(--danger);
   color: var(--danger);
 }
 
-.tag-editor__delete[data-confirming='true']:hover {
+.btn[data-confirming='true']:hover {
   background: var(--hover);
   color: var(--danger);
 }

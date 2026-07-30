@@ -3,6 +3,7 @@ import { createStore, produce, unwrap } from 'solid-js/store';
 import { repository } from '~/core/db/idb-repository';
 import { chromeTreeToBookmarks } from '~/core/io/chrome-import';
 import { htmlToBookmarks } from '~/core/io/html-import';
+import { parseBackup, serializeBackup } from '~/core/io/json-backup';
 import type { ImportResult } from '~/core/io/ingest';
 import type { FolderRules } from '~/core/io/folder-tags';
 // Bundled at build time. The file is gitignored — folder names from a real tree are
@@ -411,6 +412,79 @@ async function runImport(produce: () => Promise<ImportResult>): Promise<ImportSu
   }
 }
 
+// ── backup / restore ──────────────────────────────────────────────────────────
+
+/**
+ * Serialize the whole library for download.
+ *
+ * Reads through the repository rather than off `state`, because the store holds only what
+ * the *current surface* has loaded and a backup has to be the database. `getAll` also
+ * returns plain structured-clone output, so there is no proxy to think about.
+ */
+async function exportBackup(): Promise<string> {
+  const [bookmarks, tags] = await Promise.all([repository.getAll(), repository.getTags()]);
+  return serializeBackup(bookmarks, tags);
+}
+
+/**
+ * Replace the library with a backup file.
+ *
+ * **Deliberately not `runImport`.** That path filters incoming records against the existing
+ * library on `normalizedUrl` with "anything already in the library wins", so a restore run
+ * through it would write nothing at all. It also routes through `ingest`, which mints fresh
+ * ids and resets notes, favourites and open counts to defaults — every field a backup exists
+ * to carry. Restore writes `Bookmark` records straight through instead.
+ *
+ * Nothing is written until `parseBackup` has accepted the file. Past that point a failure
+ * can leave the library half-written, and that is survivable rather than something to
+ * engineer around: the backup file is still on disk, and running it again starts by wiping.
+ * The error message says so.
+ *
+ * Reports through its return value rather than `state.error`, which drives the banner over
+ * the list. A rejected file is a problem with the file you just picked, so it belongs beside
+ * the picker; a banner in another pane makes you hunt for what you did wrong.
+ */
+async function restoreBackup(
+  text: string,
+): Promise<{ ok: boolean; restored: number; error?: string }> {
+  const parsed = parseBackup(text);
+  if (!parsed.ok) return { ok: false, restored: 0, error: parsed.reason };
+
+  setState('loading', true);
+  try {
+    const { bookmarks, tags } = parsed.payload;
+
+    await repository.clearAll();
+    await repository.putTags(tags);
+    // Chunked like the import path, so one enormous transaction cannot stall the UI thread.
+    for (let i = 0; i < bookmarks.length; i += 500) {
+      await repository.putMany(bookmarks.slice(i, i + 500));
+    }
+    // `clearAll` wipes `meta` too, so without this a restored library would come back
+    // showing the first-run empty state over several thousand records.
+    await repository.setMeta(META.firstRunComplete, true);
+
+    // Every id the UI was pointing at is gone. The tag filter matters most: a stale tag id
+    // still narrows the query, so leaving it set would show an empty library after a
+    // restore that worked perfectly.
+    setSelectedId(null);
+    setSelectedTagId(null);
+    setFilters('tags', undefined);
+
+    await load();
+    broadcast({ kind: 'bookmarks-changed', ids: [] });
+    broadcast({ kind: 'tags-changed' });
+    return { ok: true, restored: bookmarks.length };
+  } catch (error) {
+    setState('loading', false);
+    return {
+      ok: false,
+      restored: 0,
+      error: `${describe(error)} The library may be incomplete — restore the same file again.`,
+    };
+  }
+}
+
 /**
  * Capture open tabs into the inbox.
  *
@@ -706,6 +780,7 @@ export const library = {
   setQuery, setFilters, setSort, setSelectedId, setSelectedTagId,
   showStatus, showTabs, showTags, showRecordsForTag, selectTab,
   load, watch, refreshOpenTabs, importFromChrome, importFromHtmlFile,
+  exportBackup, restoreBackup,
   saveTabs, saveAllOpenTabs, focusTab,
   activate, updateBookmark, removeBookmark,
   renameTag, setTagColor, createTag, deleteTag,

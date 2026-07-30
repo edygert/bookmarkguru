@@ -1,13 +1,14 @@
 # BookmarkGuru — progress and handoff
 
-**Status: Phase 1 complete and runtime-verified.** Loadable, usable extension.
+**Status: Phase 1 complete and runtime-verified; most of Phase 2 shipped.** Loadable, usable
+extension, and — since JSON backup landed — one whose data can be got back out again.
 
 ---
 
 ## What this is
 
 A Chrome MV3 extension that replaces the bookmark manager with a **personal link
-database**: search-first, tag-based, collection-driven, with tab awareness.
+database**: search-first, tag-based, with tab awareness.
 
 **The product principle, which drives most design decisions:** this is not "Chrome
 bookmarks with a nicer tree." Chrome's bookmark tree is an import/export bridge only —
@@ -76,6 +77,10 @@ These each cost real debugging time. None were caught by `tsc`, vitest, or the b
    `putTags` throw `ConstraintError`, which surfaces partway through an import as a
    half-written library rather than as an obvious failure. `DB_VERSION` was not bumped
    (nothing was live yet); if you have an older database, clear it once.
+
+   The same call was made again when the `collections` and `savedSearches` stores were
+   deleted — a migration block for stores nothing had ever written to would be fiction.
+   So there are now two reasons to clear the database once, both predating any real use.
 
 8. **A modifier class loses to the base class's `:hover`.** `.btn:hover` is (0,2,0) and
    `.btn--primary` is only (0,1,0), so hovering a primary button repainted it in
@@ -151,7 +156,7 @@ SURFACES (page contexts — own all IDB writes)
 src/core/  — framework-agnostic engine (plain TS, no Solid / DOM / chrome.*)
   repository · search · normalize · match · io
         ▼
-   IndexedDB  (bookmarks, tags, collections, savedSearches, meta)
+   IndexedDB  (bookmarks, tags, meta)
 
 background/service-worker.ts
   open-or-switch · commands · context menus · side-panel wiring
@@ -184,7 +189,7 @@ scripts/
   e2e/                      browser-driven verification — see its README
 src/
   core/                     ← NO Solid, NO DOM, NO chrome.*
-    types.ts                Bookmark, BookmarkStatus, Tag, Collection, SavedSearch
+    types.ts                Bookmark, BookmarkStatus, Tag, Filters, BackupPayload
     normalize-url.ts        the two normalizations + isIngestable + domainOf
     tags.ts                 TagCollector, colour mapping, generalTagId, retag
     db/                     schema.ts · repository.ts (interface) · idb-repository.ts
@@ -195,6 +200,7 @@ src/
     io/chrome-import.ts     live bookmark tree → RawEntry[]
     io/html-import.ts       exported .html → RawEntry[] (regex, never DOMParser)
     io/tabs-import.ts       open tabs → RawEntry[] (no folder path; sourceTags instead)
+    io/json-backup.ts       records ⇄ JSON string. NOT an importer — bypasses ingest
   shared/messages.ts        typed message contracts
   background/service-worker.ts
   ui/
@@ -226,8 +232,8 @@ Two deliberate choices carry the identity; both are documented in `tokens.css`.
 
 ```bash
 npm install
-npm run check          # isolation → permissions → tsc → 144 tests → build → CSP
-npm run e2e            # build, launch headless browser, run 84 browser assertions
+npm run check          # isolation → permissions → tsc → 157 tests → build → CSP
+npm run e2e            # build, launch headless browser, run 117 browser assertions
 npm run build          # → dist/, load unpacked at chrome://extensions
 npm run dev            # Vite + HMR
 npm run tags:preview -- <export.html>   # what an import would produce. Writes nothing.
@@ -472,9 +478,27 @@ Roughly in order:
 6. ~~**Open-tab import → inbox.**~~ **Done.** See "Views" above. Shipped as a sidebar
    view over the live tabs, a per-row Save, a capture button, an unbound `save-open-tabs`
    command and an action context-menu entry.
+7. ~~**JSON backup/restore.**~~ **Done, ahead of the rest of Phase 4.** See "Portability"
+   below. Everything else here is a feature; this one is the safety net under features
+   that had already shipped without one.
 
-Phases 3–4 (collections, saved searches, dedupe review, HTML/JSON export) are in
-`~/.claude/plans/create-a-plan-for-compressed-beaver.md`.
+**Phase 3** is now bulk actions (tag, archive, delete, open over a multi-selection),
+duplicate detection and merge review, and a command bar. Bulk actions carry the pressure:
+triage is one keystroke per record by design and tag delete has no bulk path either, so
+emptying a thousand-record inbox is a thousand keystrokes.
+
+**Phase 4** is the import wizard and onboarding. The original plan in
+`~/.claude/plans/create-a-plan-for-compressed-beaver.md` is now ahead of this file in two
+places — it still lists collections, saved searches and Netscape HTML export, all three of
+which are cancelled:
+
+- **Collections and saved searches: cancelled.** Tags are sufficient. Their types, their
+  six repository methods and their two object stores have been deleted rather than left
+  as dead weight — a schema that advertises features which will never ship makes every
+  reader wonder which parts are load-bearing.
+- **Netscape HTML export: cancelled.** Chrome is the only browser in use here, so a
+  portable interchange format buys nothing that JSON backup does not. HTML *import* stays:
+  it is how folder-tag rules get tuned against a real export via `npm run tags:preview`.
 
 ---
 
@@ -602,26 +626,92 @@ describe what that control does *here*.
 
 ---
 
+## Portability
+
+**Shipped.** JSON backup and restore, as two controls in a `Backup` group at the bottom of
+the sidebar. Built before the rest of Phase 4 because everything else on the roadmap is a
+feature and this is the safety net under features that had already shipped without one:
+there is no undo anywhere, tag delete strips a tag off every record behind a single button,
+and until now the browser profile held the only copy of every note.
+
+### It is not a view, and not an importer
+
+Two shapes it deliberately does not take.
+
+**Not a view.** A `Backup` view was designed and thrown away. Nothing here is browsable,
+selectable or filterable, so a view would have meant a `ViewKind` member, a `<Match>`, a
+pane component and both the toolbar search and the detail pane gated off it — all to host
+two buttons. They sit in the sidebar instead, which also puts them out of reach of the side
+panel, and replacing the whole database should not be one click away in a strip you keep
+open while browsing.
+
+**Not an importer.** Every other module in `io/` reads a foreign format into `RawEntry[]`
+and hands it to `ingest`. `json-backup.ts` cannot: `RawEntry` has no field for an id, a
+note, a status, a favourite, an open count or `Tag.parent`, and `ingest` hardcodes every one
+of those to a default and mints a fresh id besides. A backup routed through it would come
+back as a fresh import wearing the same URLs — losing precisely what it exists to carry.
+So restore writes `Bookmark` records straight through, and `SourceKind` has **no**
+`json-restore` member: a restored record is still the chrome-import it always was, and a
+member there would invite overwriting the one field a restore must leave alone.
+
+It also bypasses `runImport`, whose dedupe keeps "anything already in the library" — under
+that policy a restore would write nothing at all.
+
+### Restore replaces, and nothing is recomputed
+
+`clearAll` then write. Merge was considered and rejected: it cannot bring back a note you
+deleted or a status you changed, so it is an import with a restore's name on it.
+
+`normalizedUrl` and `domain` go back exactly as stored, never re-derived. Re-deriving them
+would mean a change to `normalizeForDedupe`'s tracking-parameter list silently rewrote every
+record it touched — a migration wearing a restore's name, which is gotcha #2 in a new place.
+
+**Two clicks, and the second one carries the count of what it destroys**, the same guard tag
+delete uses and for the same reason. Choosing a different file resets it, so an armed button
+can never be pointing at a file you have not looked at.
+
+**A half-finished restore is survivable, so there is no rollback.** Nothing is written until
+`parseBackup` has accepted the file; past that point the backup is still on disk and running
+it again starts by wiping. An atomic single-transaction `replaceAll` was designed for this
+and dropped — it bought a guarantee that a retry already provides, at the cost of one
+unbounded transaction.
+
+### What the file does not contain
+
+The `meta` store. `searchIndex` is derived from the records, so storing it creates a second
+copy of the truth that can go stale, and it is the largest value in the database.
+`firstRunComplete` is an inference rather than data — a library holding records is past first
+run — so restore sets it rather than carrying it. Note that `clearAll` wipes `meta` too, so
+a restore that forgot to re-set that marker would come back showing the first-run empty
+state over several thousand records.
+
+Validation checks identity, not every field: a `format` marker, then the schema version,
+then that both arrays are present. The realistic mistake is picking the wrong file. Every
+rule beyond that is a rule that can wrongly reject someone's only copy of their library —
+which is why a mangled `exportedAt` is displayed as unknown rather than treated as fatal.
+
+The file is pretty-printed, roughly doubling its size. A backup's whole value is that you
+trust it, and the only way to check is to open it and find a note you know you wrote.
+
+---
+
 ## Known gaps
 
 - Search is substring-only until MiniSearch is wired.
 - **No undo, anywhere.** `removeBookmark` writes straight through to IndexedDB. This is
   survivable because deleting is reachable only from the Archive, by a key that does
   nothing anywhere else, over records that had to be archived first — see "Triage" above.
-  Archiving, the act you actually repeat, is reversible with `r`.
-- **No tag merge**, deliberately — see "Tag editing". A qualified tag that turns out to be
-  redundant is *deleted*, which is safe because import emits its general form alongside it.
-  Two independently-created tags meaning the same thing cannot be folded together.
+  Archiving, the act you actually repeat, is reversible with `r`. A JSON backup is now the
+  floor under all of it — see "Portability".
 - Sidebar shows status views, the open-tabs view, the tags view and tags; domain/favourite
   filters are not exposed.
-- The open-tabs and tags views are manager-only. The side panel has no sidebar, so it
-  cannot reach either — the panel keeps the `Open now` toggle but not the lists.
-- Tag editing has no bulk actions and no undo. Deleting a tag off several hundred records
-  is one click away from irreversible; the count on the button is the only guard.
+- Tag editing has no bulk actions. Deleting a tag off several hundred records is one click
+  away from irreversible; the count on the button is the only guard.
 - Triage has no bulk actions: it is one record per keystroke by design. Emptying a
   thousand-record inbox is a thousand keystrokes.
-- No collections, saved searches, bulk actions, or dedupe review UI yet.
-- No HTML or JSON import/export yet — **JSON backup is the only safe way to preserve
-  notes and tags, so build it before relying on the library.**
+- No bulk actions or dedupe review UI yet — Phase 3.
+- No import wizard; the only import affordance is the empty state's `Import from Chrome`
+  button, which disappears as soon as one record exists. `importFromHtmlFile` is
+  implemented and exported but no UI reaches it.
 - Favicon coverage is partial by design: only URLs Chrome has already cached.
 - `eslint-plugin-solid` is not set up; gotcha #5 is enforced by discipline for now.

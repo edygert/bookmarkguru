@@ -1,7 +1,9 @@
-import { For, Show } from 'solid-js';
+import { For, Show, createSignal } from 'solid-js';
 import { library } from '../state/library';
 import { generalTagId } from '~/core/tags';
 import type { BookmarkStatus, Tag } from '~/core/types';
+
+const plural = (n: number) => (n === 1 ? 'link' : 'links');
 
 const STATUS_VIEWS: { status: BookmarkStatus; label: string }[] = [
   { status: 'active', label: 'Library' },
@@ -23,6 +25,10 @@ const STATUS_VIEWS: { status: BookmarkStatus; label: string }[] = [
  * the ones that are not bookmarks yet, which no filter over the library could show.
  */
 export function Sidebar() {
+  const [file, setFile] = createSignal<File | null>(null);
+  const [confirming, setConfirming] = createSignal(false);
+  const [note, setNote] = createSignal<{ text: string; error: boolean } | null>(null);
+
   const currentStatus = (): BookmarkStatus => library.filters.status?.[0] ?? 'active';
   /**
    * A status view is current only when the filter holds *exactly* that status. Jumping
@@ -45,6 +51,58 @@ export function Sidebar() {
   const rootLabel = (tag: Tag): string => {
     const parent = tag.parent === undefined ? undefined : library.tagsById().get(tag.parent);
     return parent ? `${parent.name} · ${tag.name}` : tag.name;
+  };
+
+  /**
+   * Download the library as JSON.
+   *
+   * A Blob and an anchor click, deliberately rather than the extension downloads API: that
+   * one needs its own manifest permission, and an undeclared namespace is `undefined` at
+   * runtime — which kills the service worker silently, with the failure surfacing nowhere.
+   * An extension page can write a file with no permission at all.
+   */
+  const download = async () => {
+    setNote(null);
+    const url = URL.createObjectURL(
+      new Blob([await library.exportBackup()], { type: 'application/json' }),
+    );
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `bookmarkguru-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  /**
+   * Picking a file resets the primed Replace button.
+   *
+   * Without this, arming the button and then choosing a different file would leave it
+   * pointing at something you have not looked at, one click from replacing the library.
+   */
+  const choose = (picked: File | undefined) => {
+    setFile(picked ?? null);
+    setConfirming(false);
+    setNote(null);
+  };
+
+  /**
+   * Two clicks, no dialog — the same shape as deleting a tag, for the same reason. There is
+   * no undo, so the count of what is about to be destroyed has to be on the button at the
+   * moment of the decision rather than one screen away.
+   */
+  const restore = async (picked: File) => {
+    if (!confirming()) {
+      setConfirming(true);
+      return;
+    }
+    const outcome = await library.restoreBackup(await picked.text());
+    setConfirming(false);
+    setNote(
+      outcome.ok
+        ? { text: `Restored ${outcome.restored} ${plural(outcome.restored)}.`, error: false }
+        : { text: outcome.error ?? 'Restore failed.', error: true },
+    );
+    if (outcome.ok) setFile(null);
   };
 
   /** Clicking a tag toggles it, so filters compose without a separate UI. */
@@ -194,6 +252,64 @@ export function Sidebar() {
           </For>
         </div>
       </Show>
+
+      {/*
+        Not a view, and deliberately not wearing `nav-item`. Everything in the groups above
+        replaces the list or narrows it; these two do neither. They live here rather than in
+        the toolbar because the sidebar is absent from the side panel, and replacing the whole
+        database should not be a click away in a strip you keep open while browsing.
+      */}
+      <div class="sidebar__group">
+        <div class="sidebar__heading">Backup</div>
+        <div class="sidebar__actions">
+          <button
+            type="button"
+            class="btn sidebar__export"
+            disabled={library.state.bookmarks.length === 0}
+            onClick={() => void download()}
+          >
+            Export {library.state.bookmarks.length} {plural(library.state.bookmarks.length)}
+          </button>
+
+          <input
+            id="restore-file"
+            class="sidebar__file"
+            type="file"
+            accept="application/json,.json"
+            onChange={(e) => choose(e.currentTarget.files?.[0])}
+          />
+          <label class="btn sidebar__file-label" for="restore-file">
+            <Show when={file()} fallback="Restore from a file…">
+              {(picked) => picked().name}
+            </Show>
+          </label>
+
+          {/* Only appears once a file is chosen — there is nothing to confirm before that. */}
+          <Show when={file()}>
+            {(picked) => (
+              <button
+                type="button"
+                class="btn sidebar__replace"
+                data-confirming={confirming()}
+                onClick={() => void restore(picked())}
+              >
+                <Show when={confirming()} fallback="Replace library">
+                  Click again — replaces {library.state.bookmarks.length}{' '}
+                  {plural(library.state.bookmarks.length)}
+                </Show>
+              </button>
+            )}
+          </Show>
+
+          <Show when={note()}>
+            {(shown) => (
+              <p class="sidebar__note" data-error={shown().error}>
+                {shown().text}
+              </p>
+            )}
+          </Show>
+        </div>
+      </div>
     </aside>
   );
 }

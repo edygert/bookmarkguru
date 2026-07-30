@@ -2,8 +2,8 @@
  * The data model for the link database.
  *
  * This is deliberately NOT Chrome's bookmark tree. Organisation is many-to-many via
- * tags and collections; the folder tree only ever appears as an import artifact that
- * has already been converted into tags.
+ * tags; the folder tree only ever appears as an import artifact that has already been
+ * converted into tags.
  */
 
 /**
@@ -17,12 +17,16 @@
  */
 export type BookmarkStatus = 'active' | 'inbox' | 'archived';
 
-export type SourceKind =
-  | 'manual'
-  | 'chrome-import'
-  | 'html-import'
-  | 'json-restore'
-  | 'tab-import';
+/**
+ * How a record entered the library.
+ *
+ * Deliberately has no `json-restore` member. A restore writes records back exactly as
+ * they were exported, `source` included, so it is not a source in its own right — a
+ * record restored from a backup is still the chrome-import it always was. A member here
+ * would invite overwriting that on the way in, which is the one thing a restore must not
+ * do.
+ */
+export type SourceKind = 'manual' | 'chrome-import' | 'html-import' | 'tab-import';
 
 export interface SourceMeta {
   kind: SourceKind;
@@ -123,27 +127,6 @@ export interface Tag {
   parent?: string;
 }
 
-export interface Collection {
-  id: string;
-  name: string;
-  description: string;
-  /** Explicit membership and explicit order — this is a hand-curated list. */
-  bookmarkIds: string[];
-  createdAt: number;
-  updatedAt: number;
-}
-
-/** A smart collection: stored rules, evaluated on read. */
-export interface SavedSearch {
-  id: string;
-  name: string;
-  query: string;
-  filters: Filters;
-  sort: SortSpec;
-  createdAt: number;
-  updatedAt: number;
-}
-
 export interface Filters {
   tags?: string[];
   /** `all` = must have every listed tag; `any` = at least one. Defaults to `all`. */
@@ -169,14 +152,25 @@ export interface SortSpec {
   dir: 'asc' | 'desc';
 }
 
-/** Everything a full-fidelity JSON backup carries. */
+/**
+ * Everything a full-fidelity JSON backup carries.
+ *
+ * Records go in and come out verbatim — ids, notes, status, open counts, `Tag.parent` —
+ * which is the whole difference between a restore and an import. Nothing derived is
+ * carried: the `meta` store holds only a first-run marker (an inference, not data) and
+ * the search index (rebuildable from the records, and a stale second copy of the truth
+ * if stored).
+ */
 export interface BackupPayload {
+  /**
+   * Fixed marker, so a JSON file that is simply not ours is rejected on identity rather
+   * than by failing some field check further in and reporting a confusing reason.
+   */
+  format: 'bookmarkguru-backup';
   schemaVersion: number;
   exportedAt: number;
   bookmarks: Bookmark[];
   tags: Tag[];
-  collections: Collection[];
-  savedSearches: SavedSearch[];
 }
 
 /** Result of any ingest path, shown in the import summary. */
