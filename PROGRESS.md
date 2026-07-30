@@ -11,8 +11,9 @@ A Chrome MV3 extension that replaces the bookmark manager with a **personal link
 database**: search-first, tag-based, with tab awareness.
 
 **The product principle, which drives most design decisions:** this is not "Chrome
-bookmarks with a nicer tree." Chrome's bookmark tree is an import/export bridge only —
-never the live data model, never the primary UI. On import, **folders become tags**, so
+bookmarks with a nicer tree." Chrome's bookmark tree is an import bridge only — never the
+live data model, never the primary UI, and nothing exports back to it. On import,
+**folders become tags**, so
 a link filed in one place becomes findable by any of its attributes.
 
 ---
@@ -25,7 +26,7 @@ a link filed in one place becomes findable by any of its attributes.
 | Language | TypeScript, strict | Solid needs a compiler for JSX anyway, so types are free |
 | Build | Vite 8 + `vite-plugin-solid` + `@crxjs/vite-plugin` | CRXJS generates the manifest and bundles the worker |
 | Storage | IndexedDB via `idb`, behind a repository interface | Per-record writes and real indexes; `chrome.storage.local` rewrites the whole collection per write |
-| Search | MiniSearch (installed, **not yet wired** — Phase 2) | Inverted index, incremental updates, serializable |
+| Search | A scan, with word-start matching | No index to build, persist or keep in sync; see "Search" below for why a search engine was turned down |
 | Styling | Plain CSS + custom properties | Zero deps, one token file drives light/dark and density |
 | Virtual list | Hand-rolled (~45 lines) | See gotcha #3 |
 
@@ -33,7 +34,7 @@ a link filed in one place becomes findable by any of its attributes.
 height, gap and pane width; `1` is the original desktop density. Change that one number and
 rebuild — do not scale fonts alone, or text outgrows the controls around it.
 
-Runtime deps: `solid-js`, `idb`, `minisearch`. That's it.
+Runtime deps: `solid-js`, `idb`. That's it.
 
 ---
 
@@ -184,7 +185,9 @@ scripts/make-icons.py       the editable icon source — edit this, not the PNGs
 vite.config.ts              note the explicit manager.html input
 scripts/
   guard-isolation.mjs       core/ must stay framework-free
-  guard-permissions.mjs     every chrome.* namespace must be declared
+  guard-permissions.mjs     every chrome.* namespace must be declared. It greps text, so
+                            naming one in a *comment* fails the build — reword, don't
+                            weaken the guard
   guard-csp.mjs             no Function-constructor/eval in dist/
   e2e/                      browser-driven verification — see its README
 src/
@@ -193,7 +196,7 @@ src/
     normalize-url.ts        the two normalizations + isIngestable + domainOf
     tags.ts                 TagCollector, colour mapping, generalTagId, retag
     db/                     schema.ts · repository.ts (interface) · idb-repository.ts
-    search/query.ts         text → filter → sort pipeline (substring today)
+    search/query.ts         text → filter → sort pipeline. A scan, deliberately
     tabs/match.ts           extensible matching strategy list
     io/folder-tags.ts       shared noise filters + tag qualification — the rules
     io/ingest.ts            RawEntry[] → records: dedupe, tag union, status routing
@@ -232,7 +235,7 @@ Two deliberate choices carry the identity; both are documented in `tokens.css`.
 
 ```bash
 npm install
-npm run check          # isolation → permissions → tsc → 157 tests → build → CSP
+npm run check          # isolation → permissions → tsc → 166 tests → build → CSP
 npm run e2e            # build, launch headless browser, run 117 browser assertions
 npm run build          # → dist/, load unpacked at chrome://extensions
 npm run dev            # Vite + HMR
@@ -250,7 +253,7 @@ without touching IndexedDB. Use it before any change to `folder-tags.ts`.
 ## What Phase 1 delivers
 
 Import your Chrome bookmarks (folders → tags, duplicates collapsed with tags unioned,
-`chrome://` skipped), browse a virtualized list, substring-search, select a row and read
+`chrome://` skipped), browse a virtualized list, search by text, select a row and read
 its detail, save the current tab from the popup with tags and already-saved detection,
 browse in the side panel, and **activate a bookmark to focus the tab that already has it
 open** rather than opening a duplicate.
@@ -259,8 +262,9 @@ open** rather than opening a duplicate.
 
 ## Views, and the difference between a view and a filter
 
-The sidebar holds **views**, one active at a time. A filter that *composes* with the
-active view does not belong there, and putting one there was a real bug worth recording.
+The sidebar's **Views** group holds views, one active at a time. A filter that *composes*
+with the active view does not belong there, and putting one there was a real bug worth
+recording.
 
 | | | |
 |---|---|---|
@@ -268,6 +272,12 @@ active view does not belong there, and putting one there was a real bug worth re
 | Open tabs | view | lists **tabs**, including ones that are not records at all |
 | Tags | view | lists **tags**, including ones on no records at all |
 | Open now | filter, in the toolbar | narrows whichever view is active |
+| Export · Restore | neither — plain buttons, in their own group | act on the database, show nothing |
+
+The last row is why the group headings matter. Backup is not a view and must not wear
+`nav-item`: everything in the Views group replaces the list or narrows it, and anything
+styled like those rows reads as something you can select. See "Portability" for why it
+lives in the sidebar at all.
 
 **Why `Open now` moved.** It sat among the three status views, styled identically, while
 behaving as a toggle that layered on top of them — so nothing distinguished "replaces the
@@ -464,10 +474,8 @@ Three rules, all enforced rather than remembered:
 
 Roughly in order:
 
-1. **Wire MiniSearch.** `minisearch` is installed but unused. Build the index in
-   `core/search/index-builder.ts`, pass a `scores` map into the existing `runQuery` —
-   the pipeline already accepts one and already handles relevance sort. Cache the
-   serialized index in the `meta` store so cold start hydrates instead of reindexing.
+1. ~~**Wire MiniSearch.**~~ **Turned down; the dependency is uninstalled.** Fixed in
+   `matchesTerm` instead — see "Search" below.
 2. ~~**Tag CRUD.**~~ **Done, without merge.** See "Tag editing" below.
 3. **Filter sidebar** — domain filter, favourites, multi-tag any/all. `Filters` already
    supports all of it; the UI does not expose it yet.
@@ -626,6 +634,73 @@ describe what that control does *here*.
 
 ---
 
+## Search
+
+A scan over the loaded records — `runQuery` in `core/search/query.ts`. No index exists
+anywhere, and that is a decision rather than an unfinished job.
+
+### Why there is no search engine
+
+MiniSearch was on the roadmap, installed and waiting. It is now uninstalled. What a search
+engine uniquely provides is **relevance ranking**, and ranking is not wanted yet. Everything
+else it offered was answered more cheaply.
+
+The two real complaints about the old matching were:
+
+- `rust async` matched nothing titled "Async Rust", because the query was one literal needle.
+- `cat` matched "dupli**cat**e" and "edu**cat**ion", because `includes` matches inside words.
+
+Both are a few lines in a function that already existed. Weighed against that, an engine
+costs an index that must be built whenever a page opens — it lives in a page's memory, not
+on disk, so the manager and the side panel each build their own — and then kept in step
+with every write.
+
+Storing it in `meta.searchIndex` avoids the rebuild and buys a worse failure. A cache is
+shared by contexts that are not: the popup writes straight to the repository without going
+through `library.ts` at all, so it can change the database while contributing nothing to a
+cached index. And a drifting index fails quietly — it returns *fewer* results, and "not
+found" is indistinguishable from "never saved it", so nothing ever prompts you to suspect
+it. Closing that needs a stored signature (record count, newest `updatedAt`, a hash of tag
+names) checked on every load, which is more machinery than the thing it protects.
+
+**An inverted index built on IndexedDB was also considered and passed over.** A `terms`
+array on each record with a `multiEntry` index — the same mechanism `tags` already uses —
+would be persistent for free and would dissolve the caching problem entirely. It was turned
+down because it puts derived data inside the records the JSON backup carries, so the backup
+would need to know to strip it, and because scoring would still be hand-written. Worth
+knowing it is a genuine option if ranking ever becomes the priority.
+
+### The matching rule
+
+A term matches at the **start of a word**: `post` finds "postgres" and "post-mortem", not
+"compost". A query splits on whitespace and **every** term must match, though not
+necessarily the same field — `rust async` finds a page titled "Async patterns" at
+doc.rust-lang.org.
+
+Three things in `hasTerm` are easy to get wrong:
+
+- **A term opening with punctuation is exempt from the rule.** `.org` follows a letter
+  everywhere it ever appears, so requiring a boundary would not make it precise — it would
+  make it unmatchable.
+- **It keeps looking after a mid-word hit.** `cat` appears inside "concatenate" before it
+  appears as a word; bailing on the first `indexOf` would report no match on a record that
+  plainly has one.
+- **It loops `indexOf` rather than tokenizing.** A match costs one search plus one character
+  test. Splitting every field of every record into tokens on every keystroke would cost more
+  than the scan it was meant to improve.
+
+The lost capability is matching inside a word: `ostgres` no longer finds "postgres". That is
+the same change that stops `cat` finding "duplicate", so it is the point rather than a
+regression — but it is a real difference from Phase 1 behaviour.
+
+### The `scores` seam is deliberately still there
+
+`SortField` keeps `relevance`, `QueryInput` keeps `scores`, and `compare()` keeps its
+scoring branch. Three lines, already tested, and the exact place ranking would plug in.
+Nothing supplies scores today.
+
+---
+
 ## Portability
 
 **Shipped.** JSON backup and restore, as two controls in a `Backup` group at the bottom of
@@ -697,14 +772,17 @@ trust it, and the only way to check is to open it and find a note you know you w
 
 ## Known gaps
 
-- Search is substring-only until MiniSearch is wired.
+- **Search does not rank.** A broad query returns everything that matches, in whatever the
+  sort dropdown says — so `rust` over a few hundred rust links gives them newest-first, and
+  the one you want is wherever it falls. Nor is there typo tolerance. Both are consequences
+  of having no index; see "Search" for why that is the trade being made.
 - **No undo, anywhere.** `removeBookmark` writes straight through to IndexedDB. This is
   survivable because deleting is reachable only from the Archive, by a key that does
   nothing anywhere else, over records that had to be archived first — see "Triage" above.
   Archiving, the act you actually repeat, is reversible with `r`. A JSON backup is now the
   floor under all of it — see "Portability".
-- Sidebar shows status views, the open-tabs view, the tags view and tags; domain/favourite
-  filters are not exposed.
+- Sidebar shows the status views, the open-tabs and tags views, the tag list and the backup
+  controls; domain and favourite filters are not exposed anywhere.
 - Tag editing has no bulk actions. Deleting a tag off several hundred records is one click
   away from irreversible; the count on the button is the only guard.
 - Triage has no bulk actions: it is one record per keystroke by design. Emptying a

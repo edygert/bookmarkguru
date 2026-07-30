@@ -4,10 +4,16 @@ import type { Bookmark, Filters, SortSpec } from '../types';
 /**
  * The read pipeline: text match → filter → sort.
  *
- * Phase 1 does text matching by substring. Phase 2 swaps in MiniSearch by passing a
- * `scores` map; everything downstream is unchanged, which is the point of keeping the
- * stages separate. Pure and synchronous, so it is trivially testable and can run
- * inside a memo without any async plumbing.
+ * Text matching is a scan, not an index. A search engine was investigated and turned down:
+ * what one uniquely provides is relevance ranking, which is not wanted yet, and everything
+ * else it offers costs an index that has to be rebuilt whenever a page opens and kept in
+ * step with every write. The two complaints that actually motivated it — multi-term queries
+ * and matching inside words — live in `matchesTerm` below.
+ *
+ * The `scores` seam is left in place for the day ranking is wanted. It is unused today.
+ *
+ * Pure and synchronous, so it is trivially testable and can run inside a memo without any
+ * async plumbing.
  */
 
 export interface QueryInput {
@@ -23,19 +29,61 @@ export interface QueryInput {
    */
   tagNames?: ReadonlyMap<string, string>;
   /**
-   * Optional relevance scores by bookmark id. When present, these replace substring
-   * matching and enable `sort: relevance`. Supplied by the search index in Phase 2.
+   * Optional relevance scores by bookmark id. When present, these replace text matching
+   * and enable `sort: relevance`. Nothing supplies these today — see the module comment.
    */
   scores?: ReadonlyMap<string, number>;
 }
 
-/** Substring match across the fields a person would actually recall. */
-function matchesText(bookmark: Bookmark, needle: string, tagNames: ReadonlyMap<string, string>): boolean {
-  if (bookmark.title.toLowerCase().includes(needle)) return true;
-  if (bookmark.url.toLowerCase().includes(needle)) return true;
-  if (bookmark.notes.toLowerCase().includes(needle)) return true;
-  if (bookmark.description.toLowerCase().includes(needle)) return true;
-  return bookmark.tags.some((id) => tagNames.get(id)?.toLowerCase().includes(needle));
+const WORD = /[\p{L}\p{N}]/u;
+
+/**
+ * Does `needle` occur in `haystack` at the start of a word?
+ *
+ * The word-start rule is what stops `cat` dragging in "duplicate" and "education", which a
+ * plain `includes` cannot avoid. It loops `indexOf` rather than splitting the haystack into
+ * tokens: a match costs one search plus one character test, where tokenizing every field of
+ * every record on every keystroke would cost more than the scan it was meant to improve.
+ *
+ * A term opening with punctuation is exempt. `.org` sits after a letter everywhere it ever
+ * appears, so demanding a word boundary would not make it precise — it would make it
+ * unmatchable.
+ */
+function hasTerm(haystack: string, needle: string): boolean {
+  const anywhere = !WORD.test(needle[0] ?? '');
+  for (let from = 0; ; ) {
+    const at = haystack.indexOf(needle, from);
+    if (at === -1) return false;
+    if (anywhere || at === 0 || !WORD.test(haystack[at - 1]!)) return true;
+    from = at + 1;
+  }
+}
+
+/** One term, across the fields a person would actually recall. */
+function matchesTerm(bookmark: Bookmark, term: string, tagNames: ReadonlyMap<string, string>): boolean {
+  // Lowercased per field here rather than hoisted into an array, so a single-term query —
+  // by far the common one — still stops at the first field that matches.
+  if (hasTerm(bookmark.title.toLowerCase(), term)) return true;
+  if (hasTerm(bookmark.url.toLowerCase(), term)) return true;
+  if (hasTerm(bookmark.notes.toLowerCase(), term)) return true;
+  if (hasTerm(bookmark.description.toLowerCase(), term)) return true;
+  return bookmark.tags.some((id) => {
+    const name = tagNames.get(id);
+    return name !== undefined && hasTerm(name.toLowerCase(), term);
+  });
+}
+
+/**
+ * Every term must match, but they need not match the same field — `rust async` finds a page
+ * titled "Async patterns" at doc.rust-lang.org. Treating the query as one literal needle
+ * instead, as this used to, meant that page matched neither word order.
+ */
+function matchesText(
+  bookmark: Bookmark,
+  terms: readonly string[],
+  tagNames: ReadonlyMap<string, string>,
+): boolean {
+  return terms.every((term) => matchesTerm(bookmark, term, tagNames));
 }
 
 function matchesFilters(
@@ -90,22 +138,22 @@ function compare(a: Bookmark, b: Bookmark, sort: SortSpec, scores?: ReadonlyMap<
 
 export function runQuery(input: QueryInput): Bookmark[] {
   const { bookmarks, query, filters, sort, openUrls, scores } = input;
-  const needle = query.trim().toLowerCase();
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
 
   // Tag ids are stored on bookmarks, but people search by tag *name*.
   const tagNames: ReadonlyMap<string, string> = input.tagNames ?? new Map();
 
   let out = bookmarks.filter((b) => matchesFilters(b, filters, openUrls));
 
-  if (needle) {
+  if (terms.length > 0) {
     out = scores
       ? out.filter((b) => scores.has(b.id))
-      : out.filter((b) => matchesText(b, needle, tagNames));
+      : out.filter((b) => matchesText(b, terms, tagNames));
   }
 
   // Relevance is meaningless without a query; fall back to something sensible.
   const effectiveSort: SortSpec =
-    sort.field === 'relevance' && !needle ? { field: 'createdAt', dir: 'desc' } : sort;
+    sort.field === 'relevance' && terms.length === 0 ? { field: 'createdAt', dir: 'desc' } : sort;
 
   return out.sort((a, b) => compare(a, b, effectiveSort, scores));
 }

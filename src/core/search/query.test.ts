@@ -81,6 +81,87 @@ describe('text matching', () => {
   });
 });
 
+describe('multi-term queries', () => {
+  const find = (bookmarks: Bookmark[], query: string) =>
+    runQuery({ bookmarks, query, filters: {}, sort: SORT_NEW });
+
+  it('matches terms in any order', () => {
+    // The whole point: as one literal needle, "rust async" matched neither word order.
+    const item = bm({ title: 'Async Rust' });
+    expect(find([item], 'rust async')).toHaveLength(1);
+    expect(find([item], 'async rust')).toHaveLength(1);
+  });
+
+  it('lets terms match different fields', () => {
+    const item = bm({ title: 'Async patterns', url: 'https://doc.rust-lang.org/book' });
+    expect(find([item], 'rust async')).toHaveLength(1);
+  });
+
+  it('requires every term, not just one', () => {
+    const item = bm({ title: 'Rust ownership' });
+    expect(find([item], 'rust')).toHaveLength(1);
+    expect(find([item], 'rust async')).toHaveLength(0);
+  });
+
+  it('collapses runs of whitespace rather than making empty terms', () => {
+    // '  '.split(/\s+/) yields empty strings, and an empty needle matches everything —
+    // so a stray double space would quietly turn the query into a match-all.
+    const item = bm({ title: 'Async Rust' });
+    expect(find([item], 'rust   async')).toHaveLength(1);
+    expect(find([item], '  rust  ')).toHaveLength(1);
+  });
+});
+
+describe('word boundaries', () => {
+  const find = (bookmarks: Bookmark[], query: string) =>
+    runQuery({ bookmarks, query, filters: {}, sort: SORT_NEW });
+
+  it('matches the start of a word but not the middle of one', () => {
+    const cat = bm({ title: 'Cat' });
+    const catalog = bm({ title: 'Catalog of things' });
+    const duplicate = bm({ title: 'Duplicate detection' });
+    const education = bm({ title: 'Education' });
+
+    expect(find([cat, catalog, duplicate, education], 'cat')).toHaveLength(2);
+  });
+
+  it('treats punctuation inside a URL as a boundary', () => {
+    // Otherwise a term could only ever match the very start of a URL, since everything
+    // after the scheme is separated by punctuation rather than spaces.
+    const item = bm({ url: 'https://doc.rust-lang.org/book' });
+    expect(find([item], 'lang')).toHaveLength(1);
+    expect(find([item], 'book')).toHaveLength(1);
+    expect(find([item], 'doc')).toHaveLength(1);
+  });
+
+  it('exempts a term that itself begins with punctuation', () => {
+    // `.org` follows a letter everywhere it appears, so requiring a boundary before it
+    // would not make it precise — it would make it unmatchable.
+    const item = bm({ url: 'https://doc.rust-lang.org/book' });
+    expect(find([item], '.org')).toHaveLength(1);
+    expect(find([item], '-lang')).toHaveLength(1);
+  });
+
+  it('finds a later occurrence when the first one is mid-word', () => {
+    // 'cat' appears inside "concatenate" before it appears as a word. Bailing on the
+    // first hit would report no match on a record that plainly has one.
+    const item = bm({ title: 'concatenate', notes: 'about a cat' });
+    expect(find([item], 'cat')).toHaveLength(1);
+  });
+
+  it('applies the rule to tag names too', () => {
+    const tagged = [bm({ tags: ['tag:cat'] }), bm({ tags: ['tag:dup'] })];
+    const out = runQuery({
+      bookmarks: tagged,
+      query: 'cat',
+      filters: {},
+      sort: SORT_NEW,
+      tagNames: new Map([['tag:cat', 'Cat'], ['tag:dup', 'Duplicates']]),
+    });
+    expect(out).toHaveLength(1);
+  });
+});
+
 describe('tag filtering', () => {
   const items = [
     bm({ tags: ['a', 'b'] }),

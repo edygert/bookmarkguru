@@ -23,7 +23,6 @@
   },
   "dependencies": {
     "idb": "^8.0.3",
-    "minisearch": "^7.2.0",
     "solid-js": "^1.9.14"
   },
   "devDependencies": {
