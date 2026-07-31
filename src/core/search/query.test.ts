@@ -18,8 +18,6 @@ function bm(over: Partial<Bookmark> = {}): Bookmark {
     updatedAt: seq,
     lastOpenedAt: null,
     openCount: 0,
-    favorite: false,
-    pinned: false,
     status: 'active' as BookmarkStatus,
     source: { kind: 'manual' },
     ...over,
@@ -179,6 +177,58 @@ describe('tag filtering', () => {
       bookmarks: items, query: '', filters: { tags: ['a', 'c'], tagMode: 'any' }, sort: SORT_NEW,
     });
     expect(out).toHaveLength(3);
+  });
+});
+
+describe('domain filtering', () => {
+  const items = [
+    bm({ domain: 'github.com', title: 'Repo', tags: ['a'] }),
+    bm({ domain: 'docs.rs', title: 'Crate', tags: ['a'] }),
+    bm({ domain: 'blog.rust-lang.org', title: 'Announcing' }),
+  ];
+
+  it('matches exactly one listed domain', () => {
+    const out = runQuery({
+      bookmarks: items, query: '', filters: { domains: ['docs.rs'] }, sort: SORT_NEW,
+    });
+    expect(out.map((b) => b.title)).toEqual(['Crate']);
+  });
+
+  it('ORs several listed domains together', () => {
+    // A record has exactly one domain, so the listed domains partition the result —
+    // which is what makes the count beside each sidebar row additive rather than
+    // overlapping. The sidebar's arithmetic depends on this.
+    const out = runQuery({
+      bookmarks: items, query: '', filters: { domains: ['docs.rs', 'github.com'] }, sort: SORT_NEW,
+    });
+    expect(out).toHaveLength(2);
+  });
+
+  it('treats an empty list as no filter, not as "match nothing"', () => {
+    // `clearFilters` and `showStatus` both write `domains: []` rather than deleting the
+    // key. If that meant "match nothing" they would blank the library instead of
+    // restoring it, and every status view would come back empty.
+    expect(runQuery({
+      bookmarks: items, query: '', filters: { domains: [] }, sort: SORT_NEW,
+    })).toHaveLength(3);
+  });
+
+  it('matches the full host, never a parent domain', () => {
+    // `domainOf` stores the whole host, so these are separate entries in the sidebar
+    // and filtering to one must not sweep in the other.
+    expect(runQuery({
+      bookmarks: items, query: '', filters: { domains: ['rust-lang.org'] }, sort: SORT_NEW,
+    })).toHaveLength(0);
+  });
+
+  it('ANDs with tags and with the query', () => {
+    expect(runQuery({
+      bookmarks: items, query: '', filters: { domains: ['github.com'], tags: ['a'] }, sort: SORT_NEW,
+    })).toHaveLength(1);
+
+    expect(runQuery({
+      bookmarks: items, query: 'crate', filters: { domains: ['github.com'] }, sort: SORT_NEW,
+    })).toHaveLength(0);
   });
 });
 

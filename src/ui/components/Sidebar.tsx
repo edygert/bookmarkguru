@@ -5,6 +5,16 @@ import type { BookmarkStatus, Tag } from '~/core/types';
 
 const plural = (n: number) => (n === 1 ? 'link' : 'links');
 
+/**
+ * How many domains the group shows before `+N more`.
+ *
+ * A real library has hundreds — `domainOf` keeps the whole host, so `docs.rust-lang.org`
+ * and `blog.rust-lang.org` are separate entries — and a list that long buries the tag
+ * group underneath it. Eight covers the domains you actually revisit; the rest are one
+ * click away, and any single row's domain is reachable from the row itself.
+ */
+const DOMAIN_LIMIT = 8;
+
 const STATUS_VIEWS: { status: BookmarkStatus; label: string }[] = [
   { status: 'active', label: 'Library' },
   { status: 'inbox', label: 'Inbox' },
@@ -12,14 +22,21 @@ const STATUS_VIEWS: { status: BookmarkStatus; label: string }[] = [
 ];
 
 /**
- * Views and tags.
+ * Views, tags and domains.
  *
- * **Everything in this pane is a view — one at a time.** That was not always true:
- * "Open now" used to sit among the status views while behaving as a toggle that
- * *composed* with them, styled identically and therefore indistinguishable. Worse, it
- * showed the number of open browser tabs beside a control that filtered bookmarks, so
- * it could read "171" and produce an empty list. The toggle now lives in the toolbar,
- * next to the search box it modifies, and its count is the count it delivers.
+ * **Views replace; tags and domains narrow; backup does neither — and the group heading
+ * is what says which.** This comment used to claim everything in the pane was a view, one
+ * at a time. That stopped being true the moment the tag list shipped, since tags compose
+ * and multi-select, and a `Domains` group widens the gap. Better to state the real rule
+ * than to leave a false one standing, because this comment is what stops the next person
+ * re-filing a toolbar toggle in here.
+ *
+ * "Open now" is still deliberately absent. It used to sit among the status views while
+ * behaving as a toggle that composed with them, styled identically and therefore
+ * indistinguishable — and it showed the number of open browser *tabs* beside a control
+ * that filtered bookmarks, so it could read "171" and produce an empty list. It lives in
+ * the toolbar now, next to the search box it modifies, and its count is the count it
+ * delivers. The rule that came out of that applies to every count in this file.
  *
  * What replaced it here is a genuine fourth view over the tabs themselves — including
  * the ones that are not bookmarks yet, which no filter over the library could show.
@@ -28,6 +45,7 @@ export function Sidebar() {
   const [file, setFile] = createSignal<File | null>(null);
   const [confirming, setConfirming] = createSignal(false);
   const [note, setNote] = createSignal<{ text: string; error: boolean } | null>(null);
+  const [allDomains, setAllDomains] = createSignal(false);
 
   const currentStatus = (): BookmarkStatus => library.filters.status?.[0] ?? 'active';
   /**
@@ -42,6 +60,12 @@ export function Sidebar() {
   const activeTags = () => library.filters.tags ?? [];
   /** Tags narrow the library only, so none of them read as active from the tab view. */
   const tagIsActive = (id: string) => library.view() === 'bookmarks' && activeTags().includes(id);
+
+  const activeDomains = () => library.filters.domains ?? [];
+  /** Same rule as tags: a domain narrows the library, so it is inert from the tab view. */
+  const domainIsActive = (domain: string) =>
+    library.view() === 'bookmarks' && activeDomains().includes(domain);
+  const tagMode = () => library.filters.tagMode ?? 'all';
 
   /**
    * A root row's label. Normally just the name — but a qualified tag orphaned by the
@@ -115,6 +139,42 @@ export function Sidebar() {
       'tags',
       current.includes(id) ? current.filter((t) => t !== id) : [...current, id],
     );
+  };
+
+  /** Toggles a domain, the same way a tag toggles — and for the same reason. */
+  const toggleDomain = (domain: string) => {
+    const current = activeDomains();
+    if (library.view() !== 'bookmarks') library.showStatus(currentStatus());
+    library.setFilters(
+      'domains',
+      current.includes(domain) ? current.filter((d) => d !== domain) : [...current, domain],
+    );
+  };
+
+  /**
+   * Domains, most-used first, truncated to `DOMAIN_LIMIT` until asked for the rest.
+   *
+   * ⚠️ **An active domain stays on the list even when its count reaches zero.** Archive or
+   * delete the last record on a domain you are filtered to and the honest count is 0 — but
+   * dropping the row there would leave the filter set with nothing on screen able to
+   * unset it, i.e. an empty library and no explanation. The same "fail visible" rule
+   * promotes an orphaned qualified tag to a root below rather than hiding it.
+   *
+   * That is also why the missing rows are appended rather than merged in before sorting:
+   * a zero-count domain has no business outranking one with records.
+   */
+  const domainList = () => {
+    const counts = library.domainCounts();
+    const ranked = [...counts.entries()]
+      .map(([domain, count]) => ({ domain, count }))
+      .sort((a, b) => b.count - a.count || a.domain.localeCompare(b.domain));
+
+    const shown = allDomains() ? ranked : ranked.slice(0, DOMAIN_LIMIT);
+    const stranded = activeDomains()
+      .filter((domain) => !shown.some((entry) => entry.domain === domain))
+      .map((domain) => ({ domain, count: counts.get(domain) ?? 0 }));
+
+    return { rows: [...shown, ...stranded], hidden: ranked.length - shown.length };
   };
 
   /**
@@ -212,7 +272,35 @@ export function Sidebar() {
 
       <Show when={tagTree().length > 0}>
         <div class="sidebar__group">
-          <div class="sidebar__heading">Tags</div>
+          {/*
+            The switch says how the selected tags combine, which is otherwise invisible:
+            clicking two tags has always ANDed them, with nothing on screen saying so.
+            `all` stays the default — `matchesFilters` defaults the same way, and flipping
+            it would silently change what every selection already on screen means.
+          */}
+          <div class="sidebar__heading sidebar__heading--split">
+            <span>Tags</span>
+            <span class="segmented" role="group" aria-label="How selected tags combine">
+              <button
+                type="button"
+                class="segmented__option"
+                aria-pressed={tagMode() === 'all'}
+                title="A link must carry every selected tag"
+                onClick={() => library.setFilters('tagMode', 'all')}
+              >
+                all
+              </button>
+              <button
+                type="button"
+                class="segmented__option"
+                aria-pressed={tagMode() === 'any'}
+                title="A link may carry any one of the selected tags"
+                onClick={() => library.setFilters('tagMode', 'any')}
+              >
+                any
+              </button>
+            </span>
+          </div>
           <For each={tagTree()}>
             {(entry) => (
               <>
@@ -250,6 +338,41 @@ export function Sidebar() {
               </>
             )}
           </For>
+        </div>
+      </Show>
+
+      <Show when={domainList().rows.length > 0}>
+        <div class="sidebar__group">
+          <div class="sidebar__heading">Domains</div>
+          <For each={domainList().rows}>
+            {(entry) => (
+              <button
+                type="button"
+                class="nav-item"
+                aria-current={domainIsActive(entry.domain)}
+                title={entry.domain}
+                onClick={() => toggleDomain(entry.domain)}
+              >
+                {/* Monospace, like the domain that leads every row — same subject,
+                    so it should read the same way in both places. */}
+                <span class="nav-item__label nav-item__label--mono">{entry.domain}</span>
+                <span class="nav-item__count">{entry.count}</span>
+              </button>
+            )}
+          </For>
+
+          {/* Not a `nav-item`: it selects nothing, it just lengthens the list. */}
+          <Show when={domainList().hidden > 0 || allDomains()}>
+            <button
+              type="button"
+              class="sidebar__more"
+              onClick={() => setAllDomains(!allDomains())}
+            >
+              <Show when={allDomains()} fallback={`+${domainList().hidden} more`}>
+                Show fewer
+              </Show>
+            </button>
+          </Show>
         </div>
       </Show>
 

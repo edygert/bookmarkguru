@@ -59,7 +59,7 @@ const seeded = await s.evaluate(`(async () => {
     notes: 'a note that only a backup can carry',
     tags: ['${GENERAL}', '${QUALIFIED}'],
     createdAt: 5000, updatedAt: 5001,
-    lastOpenedAt: 5002, openCount: 7, favorite: true, pinned: true,
+    lastOpenedAt: 5002, openCount: 7,
     status: 'archived',
     source: { kind: 'manual', importedAt: 5000 },
   });
@@ -227,7 +227,6 @@ check('its id is the original, not a fresh one', restored.record?.id === ID);
 check('the note survived', restored.record?.notes === 'a note that only a backup can carry');
 check('the status survived', restored.record?.status === 'archived');
 check('the open count survived', restored.record?.openCount === 7);
-check('favorite survived', restored.record?.favorite === true);
 check('lastOpenedAt survived', restored.record?.lastOpenedAt === 5002);
 check('createdAt was not stamped with the restore time', restored.record?.createdAt === 5000);
 check('the tag ids on the record survived', restored.record?.tags?.includes(QUALIFIED));

@@ -26,6 +26,13 @@ await wait(2500);
 const title = await popup.evaluate(`document.getElementById('title')?.value ?? '(missing)'`);
 const buttonsBefore = await popup.evaluate(
   `[...document.querySelectorAll('button')].map(b=>b.textContent.trim()).join(' | ')`);
+
+// Which page is about to be saved. The Title field is editable and may already have been
+// changed, so the icon and domain are what identify it.
+const page = JSON.parse(await popup.evaluate(`JSON.stringify({
+  favicon: !!document.querySelector('.popup__page .favicon'),
+  domain: document.querySelector('.popup__domain')?.textContent ?? null,
+})`));
 console.log('=== POPUP ===');
 console.log('  title auto-filled :', title);
 console.log('  buttons           :', buttonsBefore);
@@ -79,6 +86,7 @@ const checks = [
   ['comma-separated tags parsed', JSON.stringify(saved?.tags) === JSON.stringify(['Reading', 'Rust'])],
   ['saved as manual/active', saved?.kind === 'manual' && saved?.status === 'active'],
   ['hostless URL gets a groupable domain', saved?.domain === 'file://'],
+  ['popup shows the page it is about to save', page.favicon && page.domain === 'file://'],
   ['revisit detects "Already saved"', dupShown === true],
   ['revisit offers Update, not Save', buttonsAfter.includes('Update')],
   ['panel renders compact', layout === 'compact'],

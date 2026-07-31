@@ -229,6 +229,48 @@ const openNowCount = createMemo(() =>
   }).length,
 );
 
+/**
+ * How many rows each domain would leave, given every other filter and the search box.
+ *
+ * Same rule as `openNowCount`: a number beside a control has to be the number that
+ * control produces. Lifting `domains` out of the filter and bucketing what comes back
+ * gets every domain's count from a *single* pipeline run — `runQuery` once per domain
+ * would be O(domains × records), and there are thousands of both.
+ *
+ * The buckets are disjoint because a record has exactly one domain, which is what makes
+ * the arithmetic honest when two domains are selected: `domains` is an OR-list, so the
+ * rows really are the sum of the two counts rather than some overlapping subset.
+ */
+const domainCounts = createMemo(() => {
+  const counts = new Map<string, number>();
+  const rows = runQuery({
+    bookmarks: state.bookmarks,
+    query: query(),
+    filters: { ...filters, domains: undefined },
+    sort: sort(),
+    openUrls: openUrls(),
+    tagNames: tagNames(),
+  });
+  for (const b of rows) {
+    // `domainOf` returns '' for a URL it cannot parse. That is not a domain, it has no
+    // label anyone could read, and a filter on it would be indistinguishable from a
+    // broken row — so it is counted nowhere and the row goes on showing '—'.
+    if (!b.domain) continue;
+    counts.set(b.domain, (counts.get(b.domain) ?? 0) + 1);
+  }
+  return counts;
+});
+
+/**
+ * Whether anything is narrowing the list, which is what decides if `Clear filters` is
+ * worth showing. `status` is excluded deliberately — that is the view, not a narrowing,
+ * and there is no such thing as clearing it.
+ */
+const hasNarrowing = () =>
+  (filters.tags?.length ?? 0) > 0 ||
+  (filters.domains?.length ?? 0) > 0 ||
+  filters.openNow === true;
+
 // ── open tabs ─────────────────────────────────────────────────────────────────
 
 /** One open tab, flattened for display. `saved` is resolved against the library. */
@@ -464,12 +506,13 @@ async function restoreBackup(
     // showing the first-run empty state over several thousand records.
     await repository.setMeta(META.firstRunComplete, true);
 
-    // Every id the UI was pointing at is gone. The tag filter matters most: a stale tag id
-    // still narrows the query, so leaving it set would show an empty library after a
-    // restore that worked perfectly.
+    // Every id the UI was pointing at is gone. The narrowing filters matter most: a stale
+    // tag id or domain still narrows the query, so leaving either set would show an empty
+    // library after a restore that worked perfectly.
     setSelectedId(null);
     setSelectedTagId(null);
     setFilters('tags', undefined);
+    setFilters('domains', undefined);
 
     await load();
     broadcast({ kind: 'bookmarks-changed', ids: [] });
@@ -706,12 +749,17 @@ function describe(error: unknown): string {
 
 /**
  * Show one status view. The three are mutually exclusive because `status` is a single
- * field on a record — nothing is both active and archived — and tag filters clear with
- * the switch, since they were narrowing the view you just left.
+ * field on a record — nothing is both active and archived — and the sidebar's list
+ * selections clear with the switch, since they were narrowing the view you just left.
+ *
+ * `tags` and `domains` are named explicitly: this is the object form of a store setter,
+ * which *merges*, so a key left out survives. `openNow` and `tagMode` are left out on
+ * purpose — the first is a toolbar toggle you can see the state of, and the second is a
+ * preference about how tags combine rather than a selection of anything.
  */
 function showStatus(status: BookmarkStatus): void {
   setView('bookmarks');
-  setFilters({ status: [status], tags: [] });
+  setFilters({ status: [status], tags: [], domains: [] });
 }
 
 function showTabs(): void {
@@ -734,7 +782,31 @@ function showTags(): void {
 function showRecordsForTag(id: string): void {
   setView('bookmarks');
   setQuery('');
-  setFilters({ status: ['active', 'inbox', 'archived'], tags: [id] });
+  setFilters({ status: ['active', 'inbox', 'archived'], tags: [id], domains: [] });
+}
+
+/**
+ * Narrow to one domain, from a row rather than from the sidebar list.
+ *
+ * Replaces the domain filter instead of adding to it: clicking the domain on a row means
+ * "show me this one", where clicking a sidebar row means "add this to what I am already
+ * looking at". Same field, two different intents, and guessing wrong is a filter you did
+ * not ask for.
+ */
+function filterToDomain(domain: string): void {
+  if (!domain) return;
+  setView('bookmarks');
+  setFilters('domains', [domain]);
+}
+
+/**
+ * Clear what narrows the list, leaving the view alone.
+ *
+ * `status` stays because it *is* the view — the sidebar would have nothing selected. So
+ * does `tagMode`, which says how tags combine rather than selecting any.
+ */
+function clearFilters(): void {
+  setFilters({ tags: [], domains: [], openNow: undefined });
 }
 
 /** Selecting a tab shows its record in the detail pane, when it has one. */
@@ -773,12 +845,13 @@ export const library = {
   state,
   // reads
   visible, selected, statusCounts, tagCounts, tagsById, tagNames, openUrls, isOpen,
-  query, filters, sort, selectedId, view, openNowCount,
+  query, filters, sort, selectedId, view, openNowCount, domainCounts, hasNarrowing,
   openTabs, visibleTabs, unsavedTabCount, selectedTabId,
   tagUsage, visibleTags, selectedTag, selectedTagId,
   // writes
   setQuery, setFilters, setSort, setSelectedId, setSelectedTagId,
   showStatus, showTabs, showTags, showRecordsForTag, selectTab,
+  filterToDomain, clearFilters,
   load, watch, refreshOpenTabs, importFromChrome, importFromHtmlFile,
   exportBackup, restoreBackup,
   saveTabs, saveAllOpenTabs, focusTab,

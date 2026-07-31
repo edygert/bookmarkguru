@@ -42,7 +42,7 @@ const seeded = await s.evaluate(`(async () => {
       // Descending, so the rendered order under the default createdAt-desc sort is
       // exactly the order of this array and the assertions can name rows by index.
       createdAt: 3000 - i, updatedAt: 3000 - i,
-      lastOpenedAt: null, openCount: 0, favorite: false, pinned: false,
+      lastOpenedAt: null, openCount: 0,
       status: 'active',
       source: { kind: 'manual' },
     });

@@ -30,8 +30,6 @@ function bookmark(tags: string[]): Bookmark {
     updatedAt: 1,
     lastOpenedAt: null,
     openCount: 0,
-    favorite: false,
-    pinned: false,
     status: 'active',
     source: { kind: 'manual' },
   };

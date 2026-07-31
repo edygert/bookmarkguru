@@ -72,6 +72,59 @@ button {
   margin-bottom: var(--gap-sm);
 }
 
+/* A heading that also carries a control — the tag group's all/any switch. */
+.sidebar__heading--split {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-sm);
+}
+
+/*
+ * Two mutually exclusive options, sized to sit inside a group heading.
+ *
+ * Deliberately not a `.toggle`: that pill means "this filter is on or off", and there is
+ * no off here — tags always combine one way or the other. What this picks is which.
+ */
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  flex: none;
+}
+
+.segmented__option {
+  padding: 0 calc(5px * var(--scale));
+  height: calc(16px * var(--scale));
+  font: var(--text-xs) / 1 var(--font-mono);
+  color: var(--fg-faint);
+  text-transform: lowercase;
+  letter-spacing: 0;
+}
+
+.segmented__option:hover { background: var(--hover); color: var(--fg); }
+
+.segmented__option[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/*
+ * Lengthens the domain list. Not a `nav-item` — it selects nothing, and anything wearing
+ * that class in this pane reads as something you can have selected.
+ */
+.sidebar__more {
+  padding: var(--gap-xs) var(--pane-pad);
+  font: var(--text-xs) / 1 var(--font-mono);
+  color: var(--fg-faint);
+  text-align: left;
+  width: 100%;
+}
+
+.sidebar__more:hover { color: var(--accent); }
+
 /*
  * Backup and restore. Stacked full-width buttons rather than `nav-item` rows, because
  * these are not views — nothing in this group replaces the list or narrows it, and
@@ -132,6 +185,15 @@ button {
 }
 
 .nav-item__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/*
+ * Domains, in the same monospace the domain column uses. It is the same string in both
+ * places, and setting it in two different faces makes them read as two different things.
+ * The row's `title` carries the full host for the ones long enough to be truncated —
+ * `direction: rtl` would ellipsize from the more useful end, but it also reorders the
+ * dots in some hosts, and a domain that renders wrong is worse than one that is short.
+ */
+.nav-item__label--mono { font: var(--text-sm) / 1 var(--font-mono); }
 
 .nav-item__count {
   font: var(--text-xs) / 1 var(--font-mono);
@@ -288,6 +350,9 @@ button {
   border-bottom: 1px solid var(--border);
   border-left: 2px solid transparent;
   text-align: left;
+  /* Stated rather than inherited: every row is a `div role="option"` now, so the
+     button reset at the top of this file no longer reaches it. */
+  cursor: pointer;
 }
 
 .row:hover { background: var(--hover); }
@@ -339,6 +404,14 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/*
+ * On a bookmark row the domain is also a filter control. It stays visually identical to
+ * the plain `.row__domain` at rest — a dense list where one column is styled as a button
+ * on every line is unreadable — and only announces itself on hover.
+ */
+.row__domain--filter { text-align: left; cursor: pointer; }
+.row__domain--filter:hover { color: var(--accent); text-decoration: underline; }
 
 .row__title {
   flex: 1;
@@ -634,6 +707,16 @@ kbd {
   flex-direction: column;
   gap: var(--gap-md);
   background: var(--surface);
+}
+
+/* What is about to be saved: the site's icon and its domain. */
+.popup__page { display: flex; align-items: center; gap: var(--gap-sm); min-width: 0; }
+.popup__domain {
+  font: var(--text-sm) / 1 var(--font-mono);
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .field { display: flex; flex-direction: column; gap: var(--gap-xs); }

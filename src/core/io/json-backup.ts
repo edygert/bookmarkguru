@@ -3,8 +3,8 @@
  *
  * The other `io/` modules are *importers* — they read a foreign format and hand `RawEntry[]`
  * to `ingest`, which mints ids and derives tags from folder paths. This one deliberately
- * does none of that. `RawEntry` cannot express an id, a note, a status, a favourite, an
- * open count or `Tag.parent`, and `ingest` hardcodes every one of those to a default. A
+ * does none of that. `RawEntry` cannot express an id, a note, a status, an open count or
+ * `Tag.parent`, and `ingest` hardcodes every one of those to a default. A
  * backup routed through it would come back as a fresh import wearing the same URLs, which
  * is exactly the data loss it exists to prevent.
  *

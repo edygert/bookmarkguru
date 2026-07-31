@@ -5,6 +5,7 @@ import { domainOf, isIngestable, normalizeForDedupe } from '~/core/normalize-url
 import { newId, tagIdFromName } from '~/core/ids';
 import { colorForTag } from '~/core/tags';
 import { broadcast, send } from '~/shared/messages';
+import { Favicon } from './components/Favicon';
 import type { Bookmark, Tag } from '~/core/types';
 import './styles/app.css';
 
@@ -97,8 +98,6 @@ function Popup() {
         updatedAt: now,
         lastOpenedAt: null,
         openCount: 0,
-        favorite: false,
-        pinned: false,
         status: 'active',
         source: { kind: 'manual' },
       });
@@ -121,6 +120,16 @@ function Popup() {
           cannot work.
         */}
         <Show when={canSave()}>
+          {/*
+            Which page this is about to save. The Title field is editable and can already
+            have been changed, so it is not an identity — the icon and the domain are.
+            Domain-leads, in monospace, the same as every row in the manager.
+          */}
+          <div class="popup__page">
+            <Favicon url={url()} size={32} />
+            <span class="popup__domain">{domainOf(url()) || url()}</span>
+          </div>
+
           <Show when={existing()}>
             <div class="field__label" style={{ color: 'var(--signal)' }}>
               Already saved — adding tags will update it

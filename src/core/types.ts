@@ -103,8 +103,6 @@ export interface Bookmark {
   updatedAt: number;
   lastOpenedAt: number | null;
   openCount: number;
-  favorite: boolean;
-  pinned: boolean;
   status: BookmarkStatus;
   source: SourceMeta;
 }
@@ -134,7 +132,6 @@ export interface Filters {
   domains?: string[];
   /** Defaults to `['active']` so inbox and archived stay out of the way. */
   status?: BookmarkStatus[];
-  favorite?: boolean;
   /** Restrict to bookmarks whose URL is open in some tab right now. */
   openNow?: boolean;
 }

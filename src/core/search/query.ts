@@ -95,8 +95,6 @@ function matchesFilters(
   const statuses = filters.status ?? ['active'];
   if (!statuses.includes(bookmark.status)) return false;
 
-  if (filters.favorite === true && !bookmark.favorite) return false;
-
   if (filters.domains?.length && !filters.domains.includes(bookmark.domain)) return false;
 
   if (filters.tags?.length) {

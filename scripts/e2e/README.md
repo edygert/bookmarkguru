@@ -18,6 +18,7 @@ rather than by `tsc`, vitest, or the build:
 | Tab count shown on a bookmark filter | Both are integers — nothing static can tell "171 tabs" from "171 matches" |
 | Status edits never reached IndexedDB | A one-level spread left nested store proxies behind; the UI showed the new value and the write threw silently |
 | A renamed qualified tag vanished from the sidebar | Nesting was joined on the tag's *name*; correct types, and no test could see it until rename existed |
+| A domain count that did not match its own filter | `domainCounts` buckets one pipeline run; an off-by-one there is two good integers disagreeing |
 
 ## Running
 
@@ -28,8 +29,10 @@ node scripts/e2e/import-test.mjs
 node scripts/e2e/switch-test.mjs
 node scripts/e2e/popup-panel-test.mjs
 node scripts/e2e/tabs-test.mjs
+node scripts/e2e/filters-test.mjs
 node scripts/e2e/tags-crud-test.mjs
 node scripts/e2e/triage-test.mjs
+node scripts/e2e/backup-test.mjs
 ```
 
 Each script exits non-zero on failure. **Run them in order, against a fresh browser**

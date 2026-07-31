@@ -41,7 +41,7 @@ await s.evaluate(`(async () => {
     url, normalizedUrl: url, domain: 'tagcrud.example',
     title: '${TOKEN} one', description: '', notes: '', tags: [],
     createdAt: 4000, updatedAt: 4000,
-    lastOpenedAt: null, openCount: 0, favorite: false, pinned: false,
+    lastOpenedAt: null, openCount: 0,
     status: 'active',
     source: { kind: 'manual' },
   });

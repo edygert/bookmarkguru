@@ -182,6 +182,20 @@ export function App(props: { compact?: boolean }) {
                 Open now
                 <span class="toggle__count">{library.openNowCount()}</span>
               </button>
+
+              {/*
+                One escape hatch for everything that narrows: tags and domains from the
+                sidebar, `Open now` from right here. Shown only when it can do something,
+                so it is never a control that looks live and does nothing.
+
+                It stays in `compact` on purpose. The side panel has no sidebar, so once
+                `Open now` is on there this is the only way back out of it.
+              */}
+              <Show when={library.hasNarrowing()}>
+                <button type="button" class="btn" onClick={() => library.clearFilters()}>
+                  Clear filters
+                </button>
+              </Show>
             </Match>
           </Switch>
         </div>
@@ -246,7 +260,7 @@ export function App(props: { compact?: boolean }) {
             <Show when={!isEmpty() && library.visible().length === 0 && !library.state.loading}>
               <EmptyState
                 title="No matches"
-                body="Nothing here fits that search and the filters you have on. Try a shorter search, or clear a tag in the sidebar."
+                body="Nothing here fits that search and the filters you have on. Try a shorter search, or use Clear filters above."
               />
             </Show>
 

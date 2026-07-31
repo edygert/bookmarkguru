@@ -27,8 +27,6 @@ const RECORD: Bookmark = {
   updatedAt: 1_650_000_000_000,
   lastOpenedAt: 1_690_000_000_000,
   openCount: 7,
-  favorite: true,
-  pinned: true,
   status: 'archived',
   source: {
     kind: 'chrome-import',

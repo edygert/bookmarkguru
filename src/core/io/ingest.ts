@@ -103,8 +103,6 @@ export function ingest(entries: readonly RawEntry[], options: IngestOptions): Im
       updatedAt: now,
       lastOpenedAt: null,
       openCount: 0,
-      favorite: false,
-      pinned: false,
       // A saved tab set is a triage queue, not library material. Routing it to the inbox
       // is what stops stale session records diluting the default view.
       status: session ? 'inbox' : status,

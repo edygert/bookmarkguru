@@ -160,6 +160,19 @@ export function VirtualList<T>(props: {
       role="listbox"
       aria-label={props.ariaLabel}
       onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+      /*
+       * Clicking a row hands the keyboard to the list.
+       *
+       * Rows are `div role="option"` and so cannot hold focus — which is correct for a
+       * listbox, and required because controls nest inside them. But it means a click
+       * would otherwise leave focus on `<body>`, where `j`/`k`/`Enter` reach nothing:
+       * you would pick a row with the mouse and find the keys dead. Focusing the
+       * container here is what keeps the two input methods on speaking terms.
+       *
+       * A nested control that calls `stopPropagation` — the domain filter, the tab
+       * Save button — never gets here, so it does not steal the cursor as a side effect.
+       */
+      onClick={(e) => e.currentTarget.focus()}
       onKeyDown={onKeyDown}
     >
       {/* Spacer gives the scrollbar the full height of the unwindowed list. */}
