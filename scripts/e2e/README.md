@@ -29,7 +29,7 @@ node scripts/e2e/import-test.mjs
 node scripts/e2e/switch-test.mjs
 node scripts/e2e/popup-panel-test.mjs
 node scripts/e2e/tabs-test.mjs
-node scripts/e2e/filters-test.mjs
+node scripts/e2e/search-test.mjs
 node scripts/e2e/tags-crud-test.mjs
 node scripts/e2e/triage-test.mjs
 node scripts/e2e/import-file-test.mjs

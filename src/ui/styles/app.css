@@ -35,18 +35,42 @@ button {
 
 /* ── app shell ──────────────────────────────────────────────────────────────── */
 
+/*
+ * Sidebar down the left; the list above the detail pane on the right.
+ *
+ * The list needs width — a row carries a title and a domain — and three side-by-side
+ * columns cannot give it any: with the sidebar and a detail column both fixed, a 1440px
+ * window leaves the list 646px and an 1100px window leaves it 306px. Stacking spends
+ * height instead, which a long thin list has, and a handful of detail fields reads fine
+ * in a wide strip. `3fr / 1fr` is the quarter that leaves.
+ */
 .app {
   display: grid;
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--detail-w);
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 3fr) minmax(0, 1fr);
+  grid-template-areas:
+    'side list'
+    'side detail';
   height: 100%;
   background: var(--border);
   gap: 1px; /* hairline pane separators, drawn by the parent background */
 }
 
-.app[data-detail='hidden'] { grid-template-columns: var(--sidebar-w) minmax(0, 1fr); }
+.sidebar { grid-area: side; }
+.app > main.pane { grid-area: list; }
+.app > .detail { grid-area: detail; }
+
+/* With no detail pane there is nothing to split off, so the list takes the height. */
+.app[data-detail='hidden'] {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: 'side list';
+}
 
 /* Narrow surfaces (the side panel) collapse to a single column. */
-.app[data-layout='compact'] { grid-template-columns: minmax(0, 1fr); }
+.app[data-layout='compact'] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'list';
+}
 
 .pane {
   background: var(--surface);
@@ -71,59 +95,6 @@ button {
   padding: 0 var(--pane-pad);
   margin-bottom: var(--gap-sm);
 }
-
-/* A heading that also carries a control — the tag group's all/any switch. */
-.sidebar__heading--split {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--gap-sm);
-}
-
-/*
- * Two mutually exclusive options, sized to sit inside a group heading.
- *
- * Deliberately not a `.toggle`: that pill means "this filter is on or off", and there is
- * no off here — tags always combine one way or the other. What this picks is which.
- */
-.segmented {
-  display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  flex: none;
-}
-
-.segmented__option {
-  padding: 0 calc(5px * var(--scale));
-  height: calc(16px * var(--scale));
-  font: var(--text-xs) / 1 var(--font-mono);
-  color: var(--fg-faint);
-  text-transform: lowercase;
-  letter-spacing: 0;
-}
-
-.segmented__option:hover { background: var(--hover); color: var(--fg); }
-
-.segmented__option[aria-pressed='true'] {
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 600;
-}
-
-/*
- * Lengthens the domain list. Not a `nav-item` — it selects nothing, and anything wearing
- * that class in this pane reads as something you can have selected.
- */
-.sidebar__more {
-  padding: var(--gap-xs) var(--pane-pad);
-  font: var(--text-xs) / 1 var(--font-mono);
-  color: var(--fg-faint);
-  text-align: left;
-  width: 100%;
-}
-
-.sidebar__more:hover { color: var(--accent); }
 
 /*
  * Backup and restore. Stacked full-width buttons rather than `nav-item` rows, because
@@ -203,15 +174,6 @@ button {
 
 .nav-item__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/*
- * Domains, in the same monospace the domain column uses. It is the same string in both
- * places, and setting it in two different faces makes them read as two different things.
- * The row's `title` carries the full host for the ones long enough to be truncated —
- * `direction: rtl` would ellipsize from the more useful end, but it also reorders the
- * dots in some hosts, and a domain that renders wrong is worse than one that is short.
- */
-.nav-item__label--mono { font: var(--text-sm) / 1 var(--font-mono); }
-
 .nav-item__count {
   font: var(--text-xs) / 1 var(--font-mono);
   color: var(--fg-faint);
@@ -225,27 +187,6 @@ button {
   background: var(--tag-color, var(--tag-slate));
   flex: none;
 }
-
-/*
- * A parent-qualified tag: one sense of a name that occurs under several parents.
- * Indented under its general tag and drawn with a tree elbow rather than a colour dot —
- * it shares the general tag's colour, so a second dot would only add noise. The row is
- * shorter and dimmer because it is a refinement of the row above, not a peer of it.
- */
-.nav-item--child {
-  height: calc(24px * var(--scale));
-  padding-left: calc(var(--pane-pad) + 14px * var(--scale));
-  color: var(--fg-faint);
-}
-
-.nav-item--child::before {
-  content: '└';
-  margin-right: 4px;
-  color: var(--fg-faint);
-  font: var(--text-xs) / 1 var(--font-mono);
-}
-
-.nav-item--child:hover { color: var(--fg-muted); }
 
 /* ── toolbar ────────────────────────────────────────────────────────────────── */
 
@@ -311,47 +252,31 @@ button {
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /*
- * A composable filter, shaped so it cannot be mistaken for a view.
+ * The tag the list is drilled into, in the toolbar beside the search box it composes with.
  *
- * The sidebar's rows replace each other; this one layers on top of whichever is
- * selected. It used to live among them, styled identically, which gave no way to tell
- * that "Library" and "Open now" behaved differently — so the pill shape and the pressed
- * state are the whole point, not decoration.
+ * Shaped as a chip carrying a dismiss, not as a button: it is a piece of state you are
+ * looking at, and clicking it does one thing — leave. It is the only control in the app
+ * that narrows the list, and it exists because the Tags view can select records by tag id,
+ * which nothing typed into the search box can express.
  */
-.toggle {
+.scope {
   display: inline-flex;
   align-items: center;
   gap: var(--gap-xs);
   height: var(--control-h);
-  padding: 0 calc(10px * var(--scale));
-  border: 1px solid var(--border-strong);
+  padding: 0 calc(9px * var(--scale));
+  border: 1px solid var(--accent);
   border-radius: calc(var(--control-h) / 2);
-  background: var(--surface-raised);
-  color: var(--fg-muted);
+  background: var(--accent-soft);
+  color: var(--accent);
   font-size: var(--text-sm);
   white-space: nowrap;
+  max-width: calc(200px * var(--scale));
+  overflow: hidden;
 }
 
-.toggle:hover { background: var(--hover); color: var(--fg); }
-
-/*
- * Pressed uses the signal colour, and this is the one other place allowed to: the
- * filter's entire subject is "open in a tab right now", which is exactly what amber
- * means everywhere else in the interface.
- */
-.toggle[aria-pressed='true'] {
-  background: var(--signal-soft);
-  border-color: var(--signal-edge);
-  color: var(--fg);
-}
-
-.toggle__count {
-  font: var(--text-xs) / 1 var(--font-mono);
-  color: var(--fg-faint);
-  font-variant-numeric: tabular-nums;
-}
-
-.toggle[aria-pressed='true'] .toggle__count { color: var(--signal); }
+.scope:hover { filter: brightness(0.97); }
+.scope__clear { color: var(--accent); opacity: 0.7; }
 
 /* ── list ───────────────────────────────────────────────────────────────────── */
 
@@ -406,39 +331,62 @@ button {
 }
 
 /*
- * Domain leads the row, in monospace, ahead of the title.
+ * ── how a row spends its width ───────────────────────────────────────────────
  *
- * This inverts the usual bookmark-manager layout on purpose: when you are hunting
- * through thousands of links you generally recall the *domain* first ("it was on
- * docs.rs… no, github"), so that is what the eye should land on.
+ * Two lines. The title owns the first with the open count beside it; the domain and the
+ * chips share the second. Nothing is in a fixed-width column, so nothing has to shrink:
+ * the domain takes the width its host actually needs, chips take what is left of line
+ * two, and the title has the whole of line one.
+ *
+ * This replaces a single-line row of fixed columns — domain 148px × `--scale`, chips
+ * capped at a third of the pane — where the title got whatever those two left over, which
+ * in a 646px pane was about 100px and rendered as `U..`. No arrangement of `flex-shrink`
+ * fixes that; there was not enough width to divide.
+ *
+ * The trade is height: rows are `--row-h-2` rather than `--row-h`, so fewer fit on screen.
+ * Height is what a scrolling list has to spend.
+ */
+.row--bookmark,
+.row--tab { height: var(--row-h-2); }
+
+.row__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(2px * var(--scale));
+}
+
+.row__line {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  min-width: 0;
+}
+
+/*
+ * The domain, in monospace, under the title. Monospace is the subject's vernacular — the
+ * URL bar, the terminal. It has the second line to itself: a record's tags belong to the
+ * detail pane, which is also where they can be edited.
  */
 .row__domain {
   font: var(--text-sm) / 1 var(--font-mono);
   color: var(--fg-muted);
-  width: calc(148px * var(--scale));
-  flex: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/*
- * On a bookmark row the domain is also a filter control. It stays visually identical to
- * the plain `.row__domain` at rest — a dense list where one column is styled as a button
- * on every line is unreadable — and only announces itself on hover.
- */
-.row__domain--filter { text-align: left; cursor: pointer; }
-.row__domain--filter:hover { color: var(--accent); text-decoration: underline; }
-
-.row__title {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.row__tags { display: flex; gap: var(--gap-xs); flex: none; align-items: center; }
+.row__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .row__meta {
   font: var(--text-xs) / 1 var(--font-mono);
@@ -505,8 +453,10 @@ button {
   white-space: nowrap;
 }
 
+/* `flex: none`, or a chip squeezed to its floor loses the dot before it loses text. */
 .chip::before {
   content: '';
+  flex: none;
   width: calc(5px * var(--scale));
   height: calc(5px * var(--scale));
   border-radius: 50%;
@@ -565,6 +515,13 @@ button {
 }
 
 .tag-editor__name { width: 100%; }
+
+/* Where chips live: one wrapping row of them, in a pane wide enough to hold them. */
+.detail__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-xs);
+}
 
 .detail__tag-input { width: 100%; margin-top: var(--gap-sm); }
 
@@ -630,18 +587,66 @@ button {
 
 /* ── detail pane ────────────────────────────────────────────────────────────── */
 
-.detail { overflow-y: auto; padding: var(--gap-lg) var(--pane-pad); }
+/*
+ * A wide strip under the list, not a tall column beside it: fields sit side by side and
+ * wrap, and the strip scrolls vertically for whatever does not fit.
+ *
+ * **Wrapping flex, not `columns`.** Multi-column was the obvious fit and is wrong here: a
+ * multi-column box with a constrained height lays out extra columns *sideways*, so a
+ * record with enough content puts a whole column past the right edge where `overflow-y`
+ * cannot reach it. Wrapping flex overflows downward, which is the axis this pane scrolls.
+ *
+ * `flex-direction: row` also overrides `.pane`'s column direction, whose stretch is what
+ * made the `Open` button full-width — that read as a banner the moment the pane got wide.
+ */
+.detail {
+  display: flex;
+  flex-flow: row wrap;
+  align-content: flex-start;
+  gap: var(--gap-lg);
+  overflow-y: auto;
+  padding: var(--gap-lg) var(--pane-pad);
+}
 
-.detail__title { font: 600 var(--text-lg) / 1.3 var(--font-ui); margin: 0 0 var(--gap-xs); }
+/* Which record this is: its own row, above the fields. */
+.detail__head {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  margin-bottom: 0;
+}
 
+/* Actions sit at their natural size rather than stretching to a column's width. */
+.detail > .btn { flex: none; align-self: flex-start; }
+
+.detail__title { font: 600 var(--text-lg) / 1.3 var(--font-ui); margin: 0; }
+
+/* The tag editor's title is a direct child of `.detail`, so it claims its own row. Scoped
+   to `>` deliberately: the bookmark pane's title sits inside `.detail__head` next to a
+   favicon, and a 100% basis there would push itself past the pane by the favicon's width. */
+.detail > .detail__title { flex: 1 0 100%; }
+
+/* Its own row under the title: a URL is long, and wrapping it beside a field would
+   squeeze both. */
 .detail__url {
+  flex: 1 0 100%;
   font: var(--text-sm) / 1.4 var(--font-mono);
   color: var(--fg-muted);
   word-break: break-all;
-  margin-bottom: var(--gap-lg);
+  margin: 0;
 }
 
-.detail__section { margin-top: var(--gap-lg); }
+/*
+ * One field group. Grows to share a row, wraps to the next when it cannot have its basis,
+ * and `min-width: 0` so a long tag or note cannot push the row wider than the pane.
+ * Spacing is the parent's `gap`, so nothing depends on which group happens to be first.
+ */
+.detail__section {
+  flex: 1 1 calc(280px * var(--scale));
+  min-width: 0;
+  margin: 0;
+}
 
 .detail__label {
   font: 600 var(--text-xs) / 1 var(--font-mono);

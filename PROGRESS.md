@@ -18,12 +18,10 @@ Remaining work, highest value first. Nothing here is started.
 
 | # | Item | Notes |
 |---|---|---|
-| 1 | Duplicate detection and merge review | |
-| 2 | Command bar | |
-| 3 | Window the expanded domain list | `+N more` renders every domain into an unwindowed pane. 315 tags and hundreds of domains come out of a real import. |
-| 4 | `eslint-plugin-solid` | Gotcha #5 is enforced by discipline only. |
-| 5 | Clear the import outcome | Once set, `outcome()` persists indefinitely and permanently replaces the keyboard-hint line in the status bar. |
-| 6 | Component tests | Zero tests under `src/ui/`; every UI claim rests on the e2e scripts. |
+| 1 | Duplicate detection and merge review | Nothing exists yet. Dedupe today is exact-key only, at write time: `ingest` collapses repeats within one import, `runImport` skips URLs already stored. Neither finds near-duplicates already in the library — `http`/`https`, `www.`, a trailing slash, `index.html`, a mobile host, or non-tracking query params all produce separate records. |
+| 2 | Command bar | Unspecified. Intended as ⌘K over one box: jump to a record, switch view, run import/export/triage. Spec it or drop it. |
+| 3 | `eslint-plugin-solid` | Gotcha #5 is enforced by discipline only. |
+| 4 | Component tests | Zero tests under `src/ui/`; every UI claim rests on the e2e scripts. |
 
 ---
 
@@ -92,7 +90,7 @@ src/
     normalize-url.ts        the two normalizations + isIngestable + domainOf
     tags.ts                 TagCollector, colour mapping, generalTagId, retag
     db/                     schema.ts · repository.ts (interface) · idb-repository.ts
-    search/query.ts         text → filter → sort pipeline
+    search/query.ts         text → status → sort. Text is the only narrowing there is
     tabs/match.ts           extensible matching strategy list
     io/folder-tags.ts       noise classification + tag qualification — the rules
     io/ingest.ts            RawEntry[] → records: dedupe, tag union, status routing
@@ -103,10 +101,10 @@ src/
   shared/messages.ts        typed message contracts
   background/service-worker.ts
   ui/
-    App.tsx                 shared shell; `compact` collapses to one column
+    App.tsx                 shell: sidebar | list over detail. `compact` drops both
     state/library.ts        the ONLY place Solid meets the repository
     components/             Sidebar · VirtualList · BookmarkList · TabList · TagList ·
-                            DetailPane · TagDetail · …
+                            DetailPane · TabDetail · TagDetail · …
     styles/tokens.css       design tokens — read the header comment
     manager|panel|popup .html/.tsx
 ```
@@ -116,8 +114,9 @@ src/
 `Bookmark`: `id`, `url`, `normalizedUrl`, `domain`, `title`, `description`, `notes`,
 `tags` (ids), `createdAt`, `updatedAt`, `lastOpenedAt`, `openCount`, `status`, `source`.
 
-`Filters`: `tags`, `tagMode` (`'all' | 'any'`, default `'all'`), `domains`, `status`
-(default `['active']`), `openNow`.
+`Filters`: `status` (default `['active']`) — the view — plus `tag`, a tag **id** the Tags
+view drills into. `domain` stays a field on the record: it is the second line of every row
+and a sort option, but nothing filters on it.
 
 IndexedDB v1, `SCHEMA_VERSION` 1. Stores: `bookmarks`, `tags`, `meta`. Indexes on
 `normalizedUrl`, `domain`, `createdAt`, `updatedAt`, `lastOpenedAt`, `status`, and `tags`
@@ -131,8 +130,8 @@ memory.
 
 ```bash
 npm install
-npm run check          # isolation → permissions → tsc → 167 tests → build → CSP
-npm run e2e            # build, launch headless browser, run 165 browser assertions
+npm run check          # isolation → permissions → tsc → 168 tests → build → CSP
+npm run e2e            # build, launch headless browser, run 163 browser assertions
 npm run build          # → dist/, load unpacked at chrome://extensions
 npm run dev            # Vite + HMR
 npm run tags:preview -- <export.html>   # what an import would produce. Writes nothing.
@@ -218,11 +217,12 @@ Each cost real debugging time. None were caught by `tsc`, vitest, or the build.
 12. **A count next to a control must be the count that control produces.** The sidebar
     showed `openUrls().size` — open browser *tabs* — beside a control that filtered
     *bookmarks*, reading "171" and delivering an empty list. Both are plausible integers;
-    neither `tsc` nor a unit test can tell them apart. Hence `openNowCount` and
-    `domainCounts` run the real pipeline rather than counting something adjacent, the
-    capture button's count excludes browser-internal tabs and dedupes by normalized URL,
-    and the tag view uses `tagUsage` (all statuses) rather than the sidebar's `tagCounts`
-    (active only) because it sits beside a Delete that touches all three.
+    neither `tsc` nor a unit test can tell them apart. Hence the capture button's count
+    excludes browser-internal tabs and dedupes by normalized URL, and the tag view's
+    `tagUsage` counts all three statuses because it sits beside a Delete that touches all
+    three. Where a control genuinely cannot deliver a count, the label says what it does
+    instead: the tag view's jump reads `Search for "<name>"`, because it runs a text search
+    that also matches titles and URLs.
 
 13. **Anything derived from a tag's *name* breaks when renaming ships.** The sidebar found
     a qualified tag's general form with `tagIdFromName(tag.name)`, which held only because
@@ -233,13 +233,13 @@ Each cost real debugging time. None were caught by `tsc`, vitest, or the build.
     are identity, names are display.
 
 14. **Every list row is a `div role="option"`, never a `<button>`.** Rows host controls —
-    the domain filter, the tab Save — and a button inside a button is invalid;
+    the tab view's Save, the tag chips' remove — and a button inside a button is invalid;
     `role="option"` is also the correct child of the container's `role="listbox"`. Three
     rules follow, none visible to `tsc` or a DOM assertion:
 
     - **A row must not handle `Enter`.** `VirtualList` binds it on the container and the
       event bubbles, so a row handling it too activates twice. The only trace is
-      `openCount` climbing in pairs, which is why `filters-test.mjs` reads the counter out
+      `openCount` climbing in pairs, which is why `search-test.mjs` reads the counter out
       of IndexedDB.
     - **The container takes focus on click.** A row that cannot hold focus leaves focus on
       `<body>`, where `j`/`k`/`Enter` reach nothing.
@@ -247,35 +247,42 @@ Each cost real debugging time. None were caught by `tsc`, vitest, or the build.
 
 ---
 
-## Views and filters
+## Views
 
-A **view** replaces the list; a **filter** narrows whichever view is active. Both live in
-the sidebar, in separate groups, and the group heading is what distinguishes them.
+The sidebar is navigation. **Every control in it replaces the list or acts on the whole
+library; nothing in it narrows.** Narrowing is the search box, which matches `title`,
+`url`, `notes`, `description` and tag *names*.
 
 | Control | Kind | Notes |
 |---|---|---|
 | Library · Inbox · Archive | view | `status` is one field per record, so these partition the library |
 | Open tabs | view | lists tabs, including ones that are not records |
-| Tags | view | lists tags, including ones on no records |
-| tag list | filter | multi-select, composes with the active view |
-| domain list | filter | multi-select; `+N more` selects nothing, so it is not a `nav-item` |
-| Open now | filter, in the toolbar | |
-| Clear filters | action, in the toolbar | drops tags, domains, open-now; leaves the view |
+| Tags | view | lists tags, including ones on no records; drills into a tag's records |
+| tag scope chip | state, in the toolbar | shows what the Tags view drilled into; clicking it leaves |
 | Import from Chrome · Import a file | action, own group | see "Importing" |
 | Export · Restore | action, own group | not `nav-item`: anything wearing that class in this pane reads as selectable |
 
-**`Open now` belongs in the toolbar, not the sidebar.** Among the status views it read as
-a fourth view while behaving as a toggle layered on top of them, and both could appear
-selected at once. It sits beside the search box it composes with.
+There is no tag list, domain list or `Open now` toggle, and none should be added: each
+would be a second path to something the text match already does, kept in step for no gain.
 
-**`Open tabs` is a view because no filter over the library can show a URL the database has
+**The one exception is the tag scope**, and it is not a control — it is where the Tags view
+lands. `Show N links` sets `filters.tag` to a tag **id**, so the list is exactly the records
+that row counted; a search for the name would also match titles, URLs and notes and deliver
+more rows than the button promised. While it is on, the toolbar shows the tag as a chip,
+which is both the notice that the list is scoped and the way out of it. Switching view
+clears it.
+
+**`Open tabs` is a view because no search over the library can show a URL the database has
 never seen,** and the interesting tabs are the unsaved ones. It lists every tab across
 every window, marks the ones already saved, and offers to capture the rest.
 
-**`Tags` is a view for the same reason one level up.** The sidebar's tag list shows only
-tags with at least one active record, because it exists to pick a filter, and no filter can
-reach a tag on zero records. Without the view, untagging the last record would strand a tag
-in IndexedDB with no surface able to rename or delete it.
+**`Tags` is a view for the same reason one level up.** No search over records reaches a tag
+that no record carries, so without this view untagging the last record would strand a tag
+in IndexedDB with nothing able to rename or delete it. It is also the only tag surface:
+renaming, recolouring and deleting all live in its pane.
+
+Its `Show N links` button drills into that tag's records by id, so the number on the button
+is the number of rows you land on.
 
 ### Capturing tabs
 
@@ -283,6 +290,9 @@ in IndexedDB with no surface able to rename or delete it.
 `save-open-tabs` command and the action's context menu capture everything. All of it lands
 as `status: 'inbox'`.
 
+- **The tab list shows the tags a capture would write, from `sourceTagsFor`** — the same
+  function the capture path calls, so `TabDetail` cannot advertise a set that differs from
+  what gets saved.
 - **Tab groups and window numbers become tags via `sourceTags`, not `folderPath`.** The
   folder machinery would apply rules built for a filing tree: a group named `Feb03` drops
   as a date, and a group appearing in two windows splits into `Window 3 · Research` and
@@ -296,44 +306,20 @@ as `status: 'inbox'`.
 
 ---
 
-## Filtering
-
-Domains group in the sidebar, a clickable domain on every row, an `all`/`any` switch on the
-tag heading, and `Clear filters` in the toolbar. All UI and state: `Filters` declares
-`domains` and `tagMode` and `matchesFilters` honours both, so no `src/core/` logic is
-involved.
-
-**`domainCounts` lifts `domains` out of the filter, runs the query once, and buckets the
-result by domain.** Two properties make that correct:
-
-- The buckets are disjoint, because a record has exactly one domain. `domains` is an
-  OR-list, so selecting two shows the sum of the two counts.
-- It honours the search box and every other filter, so the group narrows as you type.
-
-`runQuery` per domain gives the same answers at O(domains × records), with thousands of
-both.
-
-**An active domain stays listed at zero.** Archiving the last record on a filtered domain
-gives an honest count of 0, but dropping the row would remove the only control able to undo
-the filter. Same fail-visible rule that promotes an orphaned qualified tag to a root.
-
-**Tags combine with `all` by default,** matching `matchesFilters`. The switch exposes that
-choice rather than changing it. `tagMode` is a preference, not a selection, so it survives
-view switches and `Clear filters`; `tags` and `domains` are dropped by both.
-
-**Clicking a row's domain replaces the domain filter; clicking a sidebar row toggles it.**
-Same field, two intents.
-
-`Clear filters` drops `tags`, `domains` and `openNow`, leaves `status` — that is the view.
-It renders only when something is on, and stays in the side panel, where with no sidebar it
-is the only way back out of `Open now`.
-
----
-
 ## Search
 
 `runQuery` in `core/search/query.ts`, an in-memory scan over the loaded records. No index
 exists anywhere.
+
+**It is the only thing that narrows a list by hand** — the tag scope is a drill-down, not a
+control. That makes two of the fields it scans load-bearing rather than convenient:
+
+- **`url` is searched because it replaces the domain filter.** Typing `github.com` narrows
+  to that host, and `rust-lang` reaches `docs.rust-lang.org` and `blog.rust-lang.org`
+  together — which the old filter could not do, since it compared the full host exactly.
+  Do not drop `url` from `matchesTerm` as redundant with the domain column.
+- **Tag *names* are searched because they replace the tag filter,** and multi-term AND
+  replaces the `all`/`any` switch: `rust-lang async` is a host and a tag in one string.
 
 ### Matching rule
 
@@ -654,9 +640,8 @@ open it and find a note you know you wrote.
 
 Both documented in `tokens.css`.
 
-- **The domain leads each row, in monospace,** ahead of the title — the inverse of every
-  other bookmark manager. When hunting thousands of links the domain is recalled first.
-  Monospace is the subject's vernacular: the URL bar, the terminal.
+- **The domain leads the second line of each row, in monospace,** under the title. Monospace
+  is the subject's vernacular: the URL bar, the terminal.
 - **Amber (`--signal`) is reserved exclusively for "open in a tab right now."** It is the
   only saturated colour in the UI. Indigo handles selection and focus; everything else is
   slate. The tag palette's `amber` is a separate, muted token and is excluded from the tag
@@ -664,3 +649,37 @@ Both documented in `tokens.css`.
 
 Adding a colour means updating three places: the light block, the dark block, and the
 explicit `:root[data-theme=…]` overrides.
+
+### Layout
+
+Sidebar full height on the left; the list **above** the detail pane, which takes a quarter
+of the height (`3fr / 1fr`). Both scroll independently and the page itself never scrolls —
+`minmax(0, …)` on each grid row is what allows that.
+
+The detail pane was a third column until horizontal space ran out: a 1440px window left the
+list 646px and an 1100px window left it 306px, so rows had a domain, a title and chips to
+fit in a pane that was never wide enough. Stacking gives the list the axis it was short of.
+
+The detail strip is **wrapping flex, not `columns`** — a multi-column box with a constrained
+height lays extra columns out sideways, past the right edge, where `overflow-y` cannot reach
+them.
+
+### Rows
+
+**A row is a title and a domain, on two lines** (`--row-h-2`) — the same shape in the
+library and in the open-tabs list, so the two URL lists scan identically. Tag rows stay one
+line (`--row-h`).
+
+**No field is in a fixed-width column.** A single-line row needs one per field, and the
+domain's was 148px × `--scale` — a third of a narrow pane — leaving titles rendering as
+`U..`. No arrangement of `flex-shrink` fixes that: there is not enough width to divide. The
+second line spends height instead, which a scrolling list has.
+
+**`VirtualList` takes the row-height token per list** (`rowHeightVar`) and caches the probe
+measurement per token. A single module-level number would window one list against another's
+height. Gotchas #3 and #9 apply to both tokens.
+
+**Attributes live in the detail pane, not on rows.** There is one per view — `DetailPane`,
+`TabDetail`, `TagDetail` — in the same slot, so no row has to carry chips, counts or state
+badges. That is also why tags are not on library rows: the detail pane lists them with a
+remove button on each, and the search box already finds a record by tag name.

@@ -30,6 +30,8 @@ export function TabList(props: { items: OpenTab[] }) {
     <VirtualList
       items={props.items}
       ariaLabel="Open tabs"
+      /* Two-line rows, like the bookmark list. */
+      rowHeightVar="--row-h-2"
       cursor={cursor()}
       onCursor={moveTo}
       onActivate={(tab) => void library.focusTab(tab)}

@@ -1,20 +1,18 @@
-import { For, Show } from 'solid-js';
+import { Show } from 'solid-js';
 import { Favicon } from './Favicon';
-import { library } from '../state/library';
 import type { Bookmark } from '~/core/types';
 
 /**
- * One row.
+ * One row: the title, then the domain under it.
  *
- * Layout note: the **domain leads**, in monospace, ahead of the title. Every other
- * bookmark manager does the reverse. When you are scanning thousands of links you
- * generally recall the domain first ("it was on docs.rs… no, github"), so that is
- * what the eye should land on.
+ * **Tags are not on the row.** The detail pane already lists them, with a remove button
+ * on each, and the search box already finds a record by tag name — a third rendering of
+ * the same field earned nothing and cost a layout rule at every width (how many chips fit,
+ * what a squeezed one looks like, how to say some were dropped).
  *
- * A `div role="option"` rather than a `button`, matching `TabRow` and `TagRow`: the
- * domain is a filter control that nests inside the row, and a button inside a button is
- * invalid. `role="option"` is also the right child for the `role="listbox"` that
- * `VirtualList` puts on the container.
+ * A `div role="option"` rather than a `button`, matching `TabRow` and `TagRow`:
+ * `role="option"` is the right child for the `role="listbox"` that `VirtualList` puts on
+ * the container, and the tab list's rows nest a Save button, which a button root forbids.
  *
  * ⚠️ **The row must not handle `Enter` itself.** `VirtualList` binds it on the container
  * and the event bubbles, so a row that also handled it would activate twice — which is
@@ -32,15 +30,9 @@ export function BookmarkRow(props: {
   onSelect: (id: string) => void;
   onActivate: (bookmark: Bookmark) => void;
 }) {
-  const tags = () =>
-    props.bookmark.tags
-      .map((id) => library.tagsById().get(id))
-      .filter((t): t is NonNullable<typeof t> => t !== undefined)
-      .slice(0, 3);
-
   return (
     <div
-      class="row"
+      class="row row--bookmark"
       role="option"
       data-open={props.isOpen}
       aria-selected={props.isSelected}
@@ -55,50 +47,32 @@ export function BookmarkRow(props: {
       <Favicon url={props.bookmark.url} />
 
       {/*
-        The domain is also the fastest filter in the app: it is the thing you remember
-        first, which is why it leads the row at all. `tabindex="-1"` keeps it out of the
-        tab order — keyboard navigation lives on the list, and a focus stop per row would
-        put hundreds of them between the list and the detail pane.
+        Two lines: the title, then the domain beneath it.
 
-        A record whose URL would not parse has `domain: ''` and gets the inert dash it
-        always had. There is nothing to filter to, and a control that narrows to nothing
-        is worse than no control.
+        One line meant a fixed-width column per field, and the domain's was 148px — a
+        third of a narrow pane spent on one field, which left titles rendering as `U..`.
+        The second line costs height, the cheapest thing a scrolling list has, and gives
+        the title the full width.
       */}
-      <Show
-        when={props.bookmark.domain}
-        fallback={<span class="row__domain">—</span>}
-      >
-        <button
-          type="button"
-          class="row__domain row__domain--filter"
-          tabindex="-1"
-          title={`Show only ${props.bookmark.domain}`}
-          /* Without this the row's own click handler also fires and moves the cursor,
-             which is harmless but makes the button feel like it did two things. */
-          onClick={(e) => {
-            e.stopPropagation();
-            library.filterToDomain(props.bookmark.domain);
-          }}
-        >
-          {props.bookmark.domain}
-        </button>
-      </Show>
+      <span class="row__body">
+        <span class="row__line">
+          <span class="row__title">{props.bookmark.title}</span>
+          <Show when={props.bookmark.openCount > 0}>
+            <span class="row__meta">{props.bookmark.openCount}×</span>
+          </Show>
+        </span>
 
-      <span class="row__title">{props.bookmark.title}</span>
+        <span class="row__line row__line--sub">
+          {/*
+            Text, not a control. This was a button that filtered the list to the domain,
+            back when a domain filter existed; typing the host into the search box does
+            the same job and reaches subdomains as well.
 
-      <span class="row__tags">
-        <For each={tags()}>
-          {(tag) => (
-            <span class="chip" style={{ '--tag-color': `var(--tag-${tag.color})` }}>
-              {tag.name}
-            </span>
-          )}
-        </For>
+            A record whose URL would not parse has `domain: ''` and shows the dash.
+          */}
+          <span class="row__domain">{props.bookmark.domain || '—'}</span>
+        </span>
       </span>
-
-      <Show when={props.bookmark.openCount > 0}>
-        <span class="row__meta">{props.bookmark.openCount}×</span>
-      </Show>
     </div>
   );
 }

@@ -160,96 +160,106 @@ describe('word boundaries', () => {
   });
 });
 
-describe('tag filtering', () => {
-  const items = [
-    bm({ tags: ['a', 'b'] }),
-    bm({ tags: ['a'] }),
-    bm({ tags: ['c'] }),
-  ];
+/**
+ * The one narrowing that is not typed. `tag` matches on id, which is what makes the Tags
+ * view's count and the list it drills into the same number — a text search for the name
+ * also hits titles, URLs and notes.
+ */
+describe('tag scope', () => {
+  const rust = bm({ title: 'Ownership', tags: ['tag:rust'] });
+  const also = bm({ title: 'Async in rust', tags: ['tag:rust', 'tag:async'] });
+  const other = bm({ title: 'A rust-free page about rust', tags: ['tag:async'] });
+  const items = [rust, also, other];
 
-  it('requires every tag in "all" mode', () => {
-    const out = runQuery({ bookmarks: items, query: '', filters: { tags: ['a', 'b'] }, sort: SORT_NEW });
-    expect(out).toHaveLength(1);
+  it('selects exactly the records carrying the tag', () => {
+    const out = runQuery({ bookmarks: items, query: '', filters: { tag: 'tag:rust' }, sort: SORT_NEW });
+    expect(out.map((b) => b.title).sort()).toEqual(['Async in rust', 'Ownership']);
   });
 
-  it('requires at least one tag in "any" mode', () => {
+  it('does not sweep in records that merely mention the name', () => {
+    // The distinction the scope exists for: this record says "rust" twice and carries no
+    // such tag, so a text search would include it and the scope must not.
+    const out = runQuery({ bookmarks: items, query: '', filters: { tag: 'tag:rust' }, sort: SORT_NEW });
+    expect(out).not.toContain(other);
+  });
+
+  it('composes with the search box', () => {
+    const out = runQuery({ bookmarks: items, query: 'async', filters: { tag: 'tag:rust' }, sort: SORT_NEW });
+    expect(out.map((b) => b.title)).toEqual(['Async in rust']);
+  });
+
+  it('spans statuses when the caller widens them, matching the tag view\'s count', () => {
+    const archived = bm({ title: 'Old', tags: ['tag:rust'], status: 'archived' });
     const out = runQuery({
-      bookmarks: items, query: '', filters: { tags: ['a', 'c'], tagMode: 'any' }, sort: SORT_NEW,
+      bookmarks: [...items, archived],
+      query: '',
+      filters: { tag: 'tag:rust', status: ['active', 'inbox', 'archived'] },
+      sort: SORT_NEW,
     });
     expect(out).toHaveLength(3);
   });
+
+  it('is absent by default, so no view is silently scoped', () => {
+    expect(runQuery({ bookmarks: items, query: '', filters: {}, sort: SORT_NEW })).toHaveLength(3);
+  });
 });
 
-describe('domain filtering', () => {
+/**
+ * There is no domain filter and no tag-name filter: typing is how both are done, so these
+ * assertions carry what those controls used to. A failure here is not a cosmetic search
+ * miss — it is a capability with nothing else offering it.
+ */
+describe('narrowing by typing, for everything else', () => {
   const items = [
-    bm({ domain: 'github.com', title: 'Repo', tags: ['a'] }),
-    bm({ domain: 'docs.rs', title: 'Crate', tags: ['a'] }),
-    bm({ domain: 'blog.rust-lang.org', title: 'Announcing' }),
+    bm({ url: 'https://github.com/rust-lang/rust', domain: 'github.com', title: 'Repo' }),
+    bm({ url: 'https://docs.rs/serde', domain: 'docs.rs', title: 'Crate' }),
+    bm({ url: 'https://blog.rust-lang.org/2024/announcing', domain: 'blog.rust-lang.org',
+         title: 'Announcing', tags: ['tag:async'] }),
   ];
 
-  it('matches exactly one listed domain', () => {
-    const out = runQuery({
-      bookmarks: items, query: '', filters: { domains: ['docs.rs'] }, sort: SORT_NEW,
-    });
+  it('narrows to one host, the way the domain filter used to', () => {
+    const out = runQuery({ bookmarks: items, query: 'docs.rs', filters: {}, sort: SORT_NEW });
     expect(out.map((b) => b.title)).toEqual(['Crate']);
   });
 
-  it('ORs several listed domains together', () => {
-    // A record has exactly one domain, so the listed domains partition the result —
-    // which is what makes the count beside each sidebar row additive rather than
-    // overlapping. The sidebar's arithmetic depends on this.
-    const out = runQuery({
-      bookmarks: items, query: '', filters: { domains: ['docs.rs', 'github.com'] }, sort: SORT_NEW,
-    });
+  it('a host term does not sweep in a different host', () => {
+    // `github.com` appears in one URL only. The old filter compared `bookmark.domain`
+    // exactly; this compares the URL text, and the guard that keeps it precise is the
+    // word-start rule rather than an equality check.
+    const out = runQuery({ bookmarks: items, query: 'github.com', filters: {}, sort: SORT_NEW });
+    expect(out).toHaveLength(1);
+  });
+
+  it('a parent host reaches its subdomains, which the filter could not', () => {
+    // The old domain filter stored the full host, so `rust-lang.org` matched nothing and
+    // `blog.rust-lang.org` was a separate row. Typing it matches the URL text instead,
+    // which is the more useful answer to "everything on rust-lang".
+    const out = runQuery({ bookmarks: items, query: 'rust-lang', filters: {}, sort: SORT_NEW });
     expect(out).toHaveLength(2);
   });
 
-  it('treats an empty list as no filter, not as "match nothing"', () => {
-    // `clearFilters` and `showStatus` both write `domains: []` rather than deleting the
-    // key. If that meant "match nothing" they would blank the library instead of
-    // restoring it, and every status view would come back empty.
-    expect(runQuery({
-      bookmarks: items, query: '', filters: { domains: [] }, sort: SORT_NEW,
-    })).toHaveLength(3);
-  });
-
-  it('matches the full host, never a parent domain', () => {
-    // `domainOf` stores the whole host, so these are separate entries in the sidebar
-    // and filtering to one must not sweep in the other.
-    expect(runQuery({
-      bookmarks: items, query: '', filters: { domains: ['rust-lang.org'] }, sort: SORT_NEW,
-    })).toHaveLength(0);
-  });
-
-  it('ANDs with tags and with the query', () => {
-    expect(runQuery({
-      bookmarks: items, query: '', filters: { domains: ['github.com'], tags: ['a'] }, sort: SORT_NEW,
-    })).toHaveLength(1);
-
-    expect(runQuery({
-      bookmarks: items, query: 'crate', filters: { domains: ['github.com'] }, sort: SORT_NEW,
-    })).toHaveLength(0);
-  });
-});
-
-describe('openNow filter', () => {
-  it('matches on match-normalization, not the stored dedupe key', () => {
-    // The stored normalizedUrl has the fragment stripped; the live tab has it.
-    const item = bm({
-      url: 'https://docs.dev/guide#install',
-      normalizedUrl: 'https://docs.dev/guide',
+  it('narrows to one tag, the way the tag filter used to', () => {
+    const out = runQuery({
+      bookmarks: items,
+      query: 'async',
+      filters: {},
+      sort: SORT_NEW,
+      tagNames: new Map([['tag:async', 'async']]),
     });
-    const open = new Set(['https://docs.dev/guide#install']);
-
-    expect(runQuery({
-      bookmarks: [item], query: '', filters: { openNow: true }, sort: SORT_NEW, openUrls: open,
-    })).toHaveLength(1);
+    expect(out.map((b) => b.title)).toEqual(['Announcing']);
   });
 
-  it('excludes bookmarks with no matching tab', () => {
-    expect(runQuery({
-      bookmarks: [bm()], query: '', filters: { openNow: true }, sort: SORT_NEW, openUrls: new Set(),
-    })).toHaveLength(0);
+  it('combines a host and a tag, which needed two controls before', () => {
+    // What the `all` mode of the tag filter did, plus the domain filter, in one string:
+    // every term must match, and they need not match the same field.
+    const out = runQuery({
+      bookmarks: items,
+      query: 'rust-lang async',
+      filters: {},
+      sort: SORT_NEW,
+      tagNames: new Map([['tag:async', 'async']]),
+    });
+    expect(out.map((b) => b.title)).toEqual(['Announcing']);
   });
 });
 

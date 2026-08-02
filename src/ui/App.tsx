@@ -5,6 +5,7 @@ import { TabList } from './components/TabList';
 import { TagList } from './components/TagList';
 import { DetailPane } from './components/DetailPane';
 import { TagDetail } from './components/TagDetail';
+import { TabDetail } from './components/TabDetail';
 import { EmptyState } from './components/EmptyState';
 import { library, type ImportOutcome } from './state/library';
 import type { SortField } from '~/core/types';
@@ -17,6 +18,9 @@ const SORTS: { field: SortField; label: string }[] = [
   { field: 'openCount', label: 'Most opened' },
 ];
 
+/** How long an import summary holds the status bar's one slot. See `report` below. */
+const OUTCOME_MS = 10_000;
+
 /**
  * Shared shell for every surface. `compact` collapses to a single column for the
  * side panel — the same components, composed differently, rather than a second app.
@@ -24,6 +28,7 @@ const SORTS: { field: SortField; label: string }[] = [
 export function App(props: { compact?: boolean }) {
   const [outcome, setOutcome] = createSignal<ImportOutcome | null>(null);
   let searchRef: HTMLInputElement | undefined;
+  let outcomeTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** One source of truth, so the sidebar and this pane cannot disagree about it. */
   const importing = () => library.importProgress() !== null;
@@ -35,6 +40,23 @@ export function App(props: { compact?: boolean }) {
   const importFailed = () => {
     const result = outcome();
     return result && !result.ok ? result.error : null;
+  };
+
+  /**
+   * Report an import, then take the report back down.
+   *
+   * The status bar has one slot: while an outcome is showing, the keyboard hints are not.
+   * Every path that sets an outcome goes through here, so none can leave the hints
+   * permanently replaced.
+   *
+   * A timer rather than "clear on the next click": the report is about a moment, and the
+   * next thing you do might be reading it. Ten seconds is long enough to read three
+   * numbers and short enough that the hints come back before you need them.
+   */
+  const report = (result: ImportOutcome) => {
+    clearTimeout(outcomeTimer);
+    setOutcome(result);
+    outcomeTimer = setTimeout(() => setOutcome(null), OUTCOME_MS);
   };
 
   onMount(() => {
@@ -54,13 +76,30 @@ export function App(props: { compact?: boolean }) {
       }
     };
     document.addEventListener('keydown', onKeyDown);
-    onCleanup(() => document.removeEventListener('keydown', onKeyDown));
+    onCleanup(() => {
+      document.removeEventListener('keydown', onKeyDown);
+      clearTimeout(outcomeTimer);
+    });
   });
 
-  const runImport = async () => setOutcome(await library.importFromChrome());
+  const runImport = async () => report(await library.importFromChrome());
 
   /** Capture whatever the tab list is currently showing, search filter included. */
-  const runTabCapture = async () => setOutcome(await library.saveTabs(library.visibleTabs()));
+  const runTabCapture = async () => report(await library.saveTabs(library.visibleTabs()));
+
+  /**
+   * How many of the rows on screen are open in a tab right now.
+   *
+   * Counted over `visible()`, so it is about the list you are looking at rather than the
+   * library or the browser — the two numbers beside it are about this list too.
+   */
+  const openInList = () => library.visible().filter((b) => library.isOpen(b)).length;
+
+  /** The tag the list is scoped to, when the Tags view drilled into one. */
+  const scopedTag = () => {
+    const id = library.filters.tag;
+    return id === undefined ? undefined : library.tagsById().get(id);
+  };
 
   const onTabs = () => library.view() === 'tabs';
   const onTags = () => library.view() === 'tags';
@@ -167,37 +206,27 @@ export function App(props: { compact?: boolean }) {
               </Show>
 
               {/*
-                A toggle, deliberately shaped like one and placed beside the search box
-                it narrows — it composes with whichever view the sidebar has selected
-                rather than replacing it. Its count is the number of rows it would
-                leave, which is the whole point: it used to show the open *tab* count
-                next to a control that filters bookmarks.
-              */}
-              <button
-                type="button"
-                class="toggle"
-                aria-pressed={library.filters.openNow === true}
-                title="Show only links that are open in a tab right now"
-                onClick={() =>
-                  library.setFilters('openNow', library.filters.openNow ? undefined : true)
-                }
-              >
-                Open now
-                <span class="toggle__count">{library.openNowCount()}</span>
-              </button>
+                The tag the list is drilled into, and the only way back out of it.
 
-              {/*
-                One escape hatch for everything that narrows: tags and domains from the
-                sidebar, `Open now` from right here. Shown only when it can do something,
-                so it is never a control that looks live and does nothing.
-
-                It stays in `compact` on purpose. The side panel has no sidebar, so once
-                `Open now` is on there this is the only way back out of it.
+                It renders only while the scope is on, so it is never a control that looks
+                live and does nothing — and it must render whenever the scope is on, or the
+                list would be hiding most of the library with nothing on screen saying why.
+                Stays in `compact`: the side panel has no sidebar, so this is the only way
+                to leave a scope there.
               */}
-              <Show when={library.hasNarrowing()}>
-                <button type="button" class="btn" onClick={() => library.clearFilters()}>
-                  Clear filters
-                </button>
+              <Show when={scopedTag()}>
+                {(tag) => (
+                  <button
+                    type="button"
+                    class="scope"
+                    title={`Showing only links tagged ${tag().name} — click to clear`}
+                    onClick={() => library.clearTagScope()}
+                  >
+                    <span class="tag-dot" style={{ '--tag-color': `var(--tag-${tag().color})` }} />
+                    {tag().name}
+                    <span class="scope__clear" aria-hidden="true">×</span>
+                  </button>
+                )}
               </Show>
             </Match>
           </Switch>
@@ -264,7 +293,7 @@ export function App(props: { compact?: boolean }) {
             <Show when={!isEmpty() && library.visible().length === 0 && !library.state.loading}>
               <EmptyState
                 title="No matches"
-                body="Nothing here fits that search and the filters you have on. Try a shorter search, or use Clear filters above."
+                body="Nothing in this view fits that search. Every term has to match, so try dropping one — or switch view: a link you archived is not in the Library."
               />
             </Show>
 
@@ -293,7 +322,7 @@ export function App(props: { compact?: boolean }) {
             <Match when={onBookmarks()}>
               <span>
                 {library.visible().length} shown · {library.state.bookmarks.length} total ·{' '}
-                {library.openNowCount()} open
+                {openInList()} open
               </span>
             </Match>
           </Switch>
@@ -321,10 +350,17 @@ export function App(props: { compact?: boolean }) {
         </div>
       </main>
 
+      {/* One detail pane per view, in the same slot: a bookmark, a tag, or a tab. Rows
+          stay title-and-domain everywhere because the attributes live here. */}
       <Show when={!props.compact}>
-        <Show when={onTags()} fallback={<DetailPane bookmark={library.selected()} />}>
-          <TagDetail tag={library.selectedTag()} />
-        </Show>
+        <Switch fallback={<DetailPane bookmark={library.selected()} />}>
+          <Match when={onTags()}>
+            <TagDetail tag={library.selectedTag()} />
+          </Match>
+          <Match when={onTabs()}>
+            <TabDetail tab={library.selectedTab()} />
+          </Match>
+        </Switch>
       </Show>
     </div>
   );

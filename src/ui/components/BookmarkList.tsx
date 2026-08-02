@@ -102,6 +102,9 @@ export function BookmarkList(props: {
     <VirtualList
       items={props.items}
       ariaLabel="Bookmarks"
+      /* Two-line rows, so this list windows against its own height token rather than the
+         one-line `--row-h` the tab and tag lists use. */
+      rowHeightVar="--row-h-2"
       cursor={cursor()}
       onCursor={moveTo}
       onActivate={(bookmark) => props.onActivate(bookmark)}

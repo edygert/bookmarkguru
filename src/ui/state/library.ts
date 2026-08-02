@@ -13,12 +13,14 @@ import folderRules from '../../../config/folder-rules.json';
 import { openTabUrlSet } from '~/core/tabs/match';
 import { colorForTag, findNameConflict, retag } from '~/core/tags';
 import { tagIdFromName } from '~/core/ids';
-import { tabsToBookmarks, windowOrdinals, type TabGroupLike } from '~/core/io/tabs-import';
+import {
+  sourceTagsFor, tabsToBookmarks, windowOrdinals, type TabGroupLike,
+} from '~/core/io/tabs-import';
 import { domainOf, isIngestable, normalizeForDedupe, normalizeForMatch } from '~/core/normalize-url';
 import { runQuery } from '~/core/search/query';
 import { broadcast, send } from '~/shared/messages';
 import type {
-  Bookmark, BookmarkStatus, Filters, ImportSummary, SortSpec, Tag,
+  Bookmark, BookmarkStatus, Filters, ImportSummary, SortSpec, SourceTag, Tag,
 } from '~/core/types';
 
 /**
@@ -86,7 +88,6 @@ const visible = createMemo(() =>
     query: query(),
     filters,
     sort: sort(),
-    openUrls: openUrls(),
     tagNames: tagNames(),
   }),
 );
@@ -115,15 +116,6 @@ const statusCounts = createMemo(() => {
   return counts;
 });
 
-const tagCounts = createMemo(() => {
-  const counts = new Map<string, number>();
-  for (const b of state.bookmarks) {
-    if (b.status !== 'active') continue;
-    for (const id of b.tags) counts.set(id, (counts.get(id) ?? 0) + 1);
-  }
-  return counts;
-});
-
 /** Records carrying a tag, split by status. See `tagUsage` for why the split matters. */
 export interface TagUsage {
   active: number;
@@ -137,14 +129,14 @@ const EMPTY_USAGE: TagUsage = { active: 0, inbox: 0, archived: 0, total: 0 };
 /**
  * How many records each tag is on, **across every status**.
  *
- * Deliberately not `tagCounts`, which counts active records only because it sits beside a
- * sidebar control that filters the library. This one sits beside Delete, which strips the
- * tag from inbox and archived records too — so reusing the filter's count would understate
- * what deleting costs, in a browser where the inbox is exactly where untriaged captures
- * pile up. A count next to a control has to be the count that control produces.
+ * All three statuses, because this number sits beside Delete, which strips the tag from
+ * inbox and archived records too. Counting active records only would understate what
+ * deleting costs, in a browser where the inbox is where untriaged captures pile up. A
+ * count next to a control has to be the count that control produces.
  *
- * Seeded from `state.tags` so a tag on zero records still has an entry: those are precisely
- * the ones the sidebar hides and the tag view has to show.
+ * Seeded from `state.tags` so a tag on zero records still has an entry. Those are the ones
+ * no search over records could ever reach, and the tag view is the only surface that can
+ * rename or delete them.
  */
 const tagUsage = createMemo(() => {
   const usage = new Map<string, TagUsage>();
@@ -208,68 +200,6 @@ const selectedTag = createMemo(() => {
   return id ? state.tags.find((t) => t.id === id) : undefined;
 });
 
-/**
- * How many rows the "open now" filter would leave — **not** how many tabs are open.
- *
- * Those are wildly different numbers (171 tabs, a handful of them bookmarked), and
- * showing the tab count next to a bookmark filter is the bug this replaces: the control
- * advertised 171 and delivered an empty list. A count beside a filter has to be the
- * count that filter produces, so this runs the real pipeline with `openNow` forced on
- * rather than counting something adjacent and hoping.
- */
-const openNowCount = createMemo(() =>
-  runQuery({
-    bookmarks: state.bookmarks,
-    query: query(),
-    filters: { ...filters, openNow: true },
-    sort: sort(),
-    openUrls: openUrls(),
-    tagNames: tagNames(),
-  }).length,
-);
-
-/**
- * How many rows each domain would leave, given every other filter and the search box.
- *
- * Same rule as `openNowCount`: a number beside a control has to be the number that
- * control produces. Lifting `domains` out of the filter and bucketing what comes back
- * gets every domain's count from a *single* pipeline run — `runQuery` once per domain
- * would be O(domains × records), and there are thousands of both.
- *
- * The buckets are disjoint because a record has exactly one domain, which is what makes
- * the arithmetic honest when two domains are selected: `domains` is an OR-list, so the
- * rows really are the sum of the two counts rather than some overlapping subset.
- */
-const domainCounts = createMemo(() => {
-  const counts = new Map<string, number>();
-  const rows = runQuery({
-    bookmarks: state.bookmarks,
-    query: query(),
-    filters: { ...filters, domains: undefined },
-    sort: sort(),
-    openUrls: openUrls(),
-    tagNames: tagNames(),
-  });
-  for (const b of rows) {
-    // `domainOf` returns '' for a URL it cannot parse. That is not a domain, it has no
-    // label anyone could read, and a filter on it would be indistinguishable from a
-    // broken row — so it is counted nowhere and the row goes on showing '—'.
-    if (!b.domain) continue;
-    counts.set(b.domain, (counts.get(b.domain) ?? 0) + 1);
-  }
-  return counts;
-});
-
-/**
- * Whether anything is narrowing the list, which is what decides if `Clear filters` is
- * worth showing. `status` is excluded deliberately — that is the view, not a narrowing,
- * and there is no such thing as clearing it.
- */
-const hasNarrowing = () =>
-  (filters.tags?.length ?? 0) > 0 ||
-  (filters.domains?.length ?? 0) > 0 ||
-  filters.openNow === true;
-
 // ── open tabs ─────────────────────────────────────────────────────────────────
 
 /** One open tab, flattened for display. `saved` is resolved against the library. */
@@ -279,11 +209,17 @@ export interface OpenTab {
   title: string;
   domain: string;
   windowId: number;
+  /** Sort key only — the window is shown as a tag, like everything else. */
   windowOrdinal: number;
   index: number;
   groupId: number;
-  groupTitle: string | undefined;
-  groupColor: string | undefined;
+  /**
+   * The tags a capture would write for this tab: its group, then its window.
+   *
+   * From `sourceTagsFor`, the same function the capture path calls, so what `TabDetail`
+   * shows cannot differ from what a capture writes.
+   */
+  tags: SourceTag[];
   /** The library record for this URL, when there is one. */
   bookmarkId: string | undefined;
   /**
@@ -327,14 +263,17 @@ const openTabs = createMemo<OpenTab[]>(() => {
         windowOrdinal: ordinals.get(tab.windowId) ?? 0,
         index: tab.index,
         groupId: tab.groupId,
-        groupTitle: title || undefined,
-        groupColor: group?.color,
+        tags: sourceTagsFor(tab, groupById, ordinals),
         bookmarkId: byNormalizedUrl.get(normalizeForDedupe(tab.url)),
         saveable: isIngestable(tab.url),
       };
     })
     .sort((a, b) => a.windowOrdinal - b.windowOrdinal || a.index - b.index);
 });
+
+/** The tab under the cursor, for the detail pane. */
+const selectedTab = createMemo(() =>
+  openTabs().find((t) => t.id === selectedTabId()));
 
 /** The tab list after the search box. Same box, so one search covers both views. */
 const visibleTabs = createMemo(() => {
@@ -344,7 +283,7 @@ const visibleTabs = createMemo(() => {
   return openTabs().filter((tab) =>
     tab.title.toLowerCase().includes(needle) ||
     tab.url.toLowerCase().includes(needle) ||
-    (tab.groupTitle?.toLowerCase().includes(needle) ?? false));
+    tab.tags.some((t) => t.name.toLowerCase().includes(needle)));
 });
 
 /**
@@ -398,8 +337,8 @@ const rules: FolderRules = folderRules;
 /**
  * What an import is doing right now. `null` when none is running.
  *
- * `total` 0 means there is no honest denominator yet — reading and parsing have no
- * countable steps — so the bar is omitted and only the label shows.
+ * `total` 0 means there is no denominator yet — reading and parsing have no countable
+ * steps — so the bar is omitted and only the label shows.
  */
 export interface ImportProgress {
   label: string;
@@ -560,13 +499,10 @@ async function restoreBackup(
       await repository.putMany(bookmarks.slice(i, i + 500));
     }
 
-    // Every id the UI was pointing at is gone. The narrowing filters matter most: a stale
-    // tag id or domain still narrows the query, so leaving either set would show an empty
-    // library after a restore that worked perfectly.
+    // Every id the UI was pointing at is gone, so the detail panes have to let go of them.
+    // The search box is left alone: it holds text, not an id, and text cannot go stale.
     setSelectedId(null);
     setSelectedTagId(null);
-    setFilters('tags', undefined);
-    setFilters('domains', undefined);
 
     await load();
     broadcast({ kind: 'bookmarks-changed', ids: [] });
@@ -754,11 +690,10 @@ async function deleteTag(id: string): Promise<number> {
   setState('tags', (list) => list.filter((t) => t.id !== id));
   for (const record of changed) patchLocal(record.id, { tags: record.tags, updatedAt: record.updatedAt });
 
-  // A filter pointing at a tag that no longer exists shows an empty list under a sidebar
-  // row that is also gone — nothing on screen would explain where the records went.
-  const active = filters.tags ?? [];
-  if (active.includes(id)) setFilters('tags', active.filter((t) => t !== id));
   if (selectedTagId() === id) setSelectedTagId(null);
+  // The list is scoped to a tag that no longer exists: every row would vanish with the
+  // toolbar still naming it.
+  if (filters.tag === id) setFilters('tag', undefined);
 
   broadcast({ kind: 'tags-changed' });
   if (changed.length > 0) broadcast({ kind: 'bookmarks-changed', ids: changed.map((b) => b.id) });
@@ -803,17 +738,17 @@ function describe(error: unknown): string {
 
 /**
  * Show one status view. The three are mutually exclusive because `status` is a single
- * field on a record — nothing is both active and archived — and the sidebar's list
- * selections clear with the switch, since they were narrowing the view you just left.
+ * field on a record — nothing is both active and archived.
  *
- * `tags` and `domains` are named explicitly: this is the object form of a store setter,
- * which *merges*, so a key left out survives. `openNow` and `tagMode` are left out on
- * purpose — the first is a toolbar toggle you can see the state of, and the second is a
- * preference about how tags combine rather than a selection of anything.
+ * The search box is deliberately left alone. It is the only narrowing control left, so
+ * clearing it here would mean switching views silently discarded what you had typed.
  */
 function showStatus(status: BookmarkStatus): void {
   setView('bookmarks');
-  setFilters({ status: [status], tags: [], domains: [] });
+  // `tag` is named explicitly: this is the object form of a store setter, which *merges*,
+  // so a key left out survives — and a tag scope surviving a view switch would silently
+  // hide most of the view you just chose.
+  setFilters({ status: [status], tag: undefined });
 }
 
 function showTabs(): void {
@@ -825,45 +760,29 @@ function showTags(): void {
 }
 
 /**
- * Jump from a tag to the records that carry it.
+ * Drill from a row of the Tags view into the records that carry that tag.
  *
- * The bridge between managing tags and using them: before removing a tag you want to see
- * what is on it, and the Library is where that lives. Statuses are widened to all three
- * because the tag view counts all three — landing on a filter that hides two thirds of the
- * records you were just shown a count for is the same class of fault as counting the wrong
- * thing in the first place.
+ * Scoped by **tag id**, so the list is exactly the records the row counted. A search for
+ * the tag's name would also match titles, URLs and notes, which makes the list a superset
+ * and the count beside the control a lie (gotcha #12).
+ *
+ * Statuses widen to all three because the Tags view counts all three — landing on a view
+ * that hides two thirds of the records you were just shown a count for is the same fault
+ * from the other direction. The search box is cleared for the same reason: a leftover
+ * query would silently cut into the count that was just promised.
  */
 function showRecordsForTag(id: string): void {
   setView('bookmarks');
   setQuery('');
-  setFilters({ status: ['active', 'inbox', 'archived'], tags: [id], domains: [] });
+  setFilters({ status: ['active', 'inbox', 'archived'], tag: id });
 }
 
-/**
- * Narrow to one domain, from a row rather than from the sidebar list.
- *
- * Replaces the domain filter instead of adding to it: clicking the domain on a row means
- * "show me this one", where clicking a sidebar row means "add this to what I am already
- * looking at". Same field, two different intents, and guessing wrong is a filter you did
- * not ask for.
- */
-function filterToDomain(domain: string): void {
-  if (!domain) return;
-  setView('bookmarks');
-  setFilters('domains', [domain]);
+/** Drop the tag scope, leaving the view and the search box alone. */
+function clearTagScope(): void {
+  setFilters('tag', undefined);
 }
 
-/**
- * Clear what narrows the list, leaving the view alone.
- *
- * `status` stays because it *is* the view — the sidebar would have nothing selected. So
- * does `tagMode`, which says how tags combine rather than selecting any.
- */
-function clearFilters(): void {
-  setFilters({ tags: [], domains: [], openNow: undefined });
-}
-
-/** Selecting a tab shows its record in the detail pane, when it has one. */
+/** Selecting a tab drives `TabDetail`, and its record's pane when it has one. */
 function selectTab(tab: OpenTab): void {
   setSelectedTabId(tab.id);
   setSelectedId(tab.bookmarkId ?? null);
@@ -898,14 +817,13 @@ function watch(): void {
 export const library = {
   state,
   // reads
-  visible, selected, statusCounts, tagCounts, tagsById, tagNames, openUrls, isOpen,
-  query, filters, sort, selectedId, view, openNowCount, domainCounts, hasNarrowing,
-  openTabs, visibleTabs, unsavedTabCount, selectedTabId,
+  visible, selected, statusCounts, tagsById, tagNames, openUrls, isOpen,
+  query, filters, sort, selectedId, view,
+  openTabs, visibleTabs, unsavedTabCount, selectedTabId, selectedTab,
   tagUsage, visibleTags, selectedTag, selectedTagId,
   // writes
   setQuery, setFilters, setSort, setSelectedId, setSelectedTagId,
-  showStatus, showTabs, showTags, showRecordsForTag, selectTab,
-  filterToDomain, clearFilters,
+  showStatus, showTabs, showTags, showRecordsForTag, clearTagScope, selectTab,
   load, watch, refreshOpenTabs, importFromChrome, importFromFiles, importProgress,
   exportBackup, restoreBackup,
   saveTabs, saveAllOpenTabs, focusTab,

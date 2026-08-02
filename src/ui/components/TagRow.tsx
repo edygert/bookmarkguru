@@ -9,9 +9,12 @@ import type { TagRow as TagRowData } from '../state/library';
  * and the name rather than a domain, because a tag has no URL to lead with.
  *
  * The count is `usage.total`: records across **every** status, which is what deleting
- * this tag would touch. The sidebar's count next to the same tag is smaller and means
- * something else — rows its filter would show. Both are correct beside the control they
- * sit next to, and neither would be correct beside the other.
+ * this tag would touch. It is the only tag count in the app now that the sidebar's tag
+ * filter is gone — that one counted active records only, because it sat beside a control
+ * that showed active records, and the two numbers were routinely different.
+ *
+ * Activating a row drills into the records carrying it, by id — so what lands on screen
+ * is the set this row just counted.
  */
 export function TagRow(props: {
   row: TagRowData;

@@ -1,8 +1,11 @@
-import { normalizeForMatch } from '../normalize-url';
 import type { Bookmark, Filters, SortSpec } from '../types';
 
 /**
  * The read pipeline: text match → filter → sort.
+ *
+ * "Filter" is the view and nothing else — one status field. Narrowing is the text match,
+ * which reads `url` and tag *names*, so a bare host and a tag name each narrow the list
+ * without a control of their own.
  *
  * Text matching is a scan, not an index. A search engine was investigated and turned down:
  * what one uniquely provides is relevance ranking, which is not wanted yet, and everything
@@ -21,8 +24,6 @@ export interface QueryInput {
   query: string;
   filters: Filters;
   sort: SortSpec;
-  /** Normalized URLs currently open in a tab; required for the `openNow` filter. */
-  openUrls?: ReadonlySet<string>;
   /**
    * Tag id → display name. Bookmarks store tag *ids*, but people search by name,
    * so text matching needs the lookup to resolve them.
@@ -86,28 +87,20 @@ function matchesText(
   return terms.every((term) => matchesTerm(bookmark, term, tagNames));
 }
 
-function matchesFilters(
-  bookmark: Bookmark,
-  filters: Filters,
-  openUrls: ReadonlySet<string> | undefined,
-): boolean {
+/**
+ * The view, and the tag it is scoped to.
+ *
+ * A domain or open-now filter does not belong here — each would duplicate something
+ * `matchesText` already does. `tag` is the exception because it matches on **id**: a text
+ * search for a tag's name also hits titles, URLs and notes, so it cannot answer "exactly
+ * the records carrying this tag", which is what the Tags view drills into.
+ */
+function matchesFilters(bookmark: Bookmark, filters: Filters): boolean {
   // Default to active only, so inbox and archived stay out of the way unless asked for.
   const statuses = filters.status ?? ['active'];
   if (!statuses.includes(bookmark.status)) return false;
 
-  if (filters.domains?.length && !filters.domains.includes(bookmark.domain)) return false;
-
-  if (filters.tags?.length) {
-    const mode = filters.tagMode ?? 'all';
-    const has = (id: string) => bookmark.tags.includes(id);
-    if (mode === 'all' ? !filters.tags.every(has) : !filters.tags.some(has)) return false;
-  }
-
-  if (filters.openNow === true) {
-    if (!openUrls?.has(normalizeForMatch(bookmark.url))) return false;
-  }
-
-  return true;
+  return filters.tag === undefined || bookmark.tags.includes(filters.tag);
 }
 
 function compare(a: Bookmark, b: Bookmark, sort: SortSpec, scores?: ReadonlyMap<string, number>): number {
@@ -135,13 +128,13 @@ function compare(a: Bookmark, b: Bookmark, sort: SortSpec, scores?: ReadonlyMap<
 }
 
 export function runQuery(input: QueryInput): Bookmark[] {
-  const { bookmarks, query, filters, sort, openUrls, scores } = input;
+  const { bookmarks, query, filters, sort, scores } = input;
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
 
   // Tag ids are stored on bookmarks, but people search by tag *name*.
   const tagNames: ReadonlyMap<string, string> = input.tagNames ?? new Map();
 
-  let out = bookmarks.filter((b) => matchesFilters(b, filters, openUrls));
+  let out = bookmarks.filter((b) => matchesFilters(b, filters));
 
   if (terms.length > 0) {
     out = scores

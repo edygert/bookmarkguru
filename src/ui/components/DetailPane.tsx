@@ -104,7 +104,10 @@ export function DetailPane(props: { bookmark: Bookmark | undefined }) {
       >
         {(bookmark) => (
           <>
-            <div style={{ display: 'flex', 'align-items': 'center', gap: '8px', 'margin-bottom': '8px' }}>
+            {/* Identity first, across the full width — the fields below it flow into
+                columns, and a heading that flowed with them would be findable only by
+                reading the column it happened to land in. */}
+            <div class="detail__head">
               <Favicon url={bookmark().url} size={32} />
               <h1 class="detail__title">{bookmark().title}</h1>
             </div>
@@ -121,7 +124,7 @@ export function DetailPane(props: { bookmark: Bookmark | undefined }) {
 
             <div class="detail__section">
               <div class="detail__label">Tags</div>
-              <div style={{ display: 'flex', gap: '4px', 'flex-wrap': 'wrap' }}>
+              <div class="detail__chips">
                 <For each={tags()}>
                   {(tag) => (
                     <span class="chip" style={{ '--tag-color': `var(--tag-${tag.color})` }}>

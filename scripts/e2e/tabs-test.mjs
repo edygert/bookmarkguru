@@ -55,9 +55,23 @@ const liveTabs = JSON.parse(await s.evaluate(`chrome.tabs.query({}).then(ts => J
 
 const sidebarTabCount = Number(await s.evaluate(
   `${navItem('Open tabs')}?.querySelector('.nav-item__count')?.textContent ?? 'NaN'`));
-const toggleCount = Number(await s.evaluate(`${text('.toggle__count')} || 'NaN'`) ?? 'NaN');
+/**
+ * `… · N open` in the status bar.
+ *
+ * This number used to sit on an `Open now` toggle in the toolbar, which filtered the list
+ * down to it. The toggle is gone — the amber dot on each row and the Open tabs view cover
+ * it — but the readout stayed, and it is still the number that has to be about *records*
+ * rather than about tabs.
+ */
+const statusOpen = Number(/(\d+) open/.exec(await s.evaluate(text('.status-bar')))?.[1] ?? 'NaN');
 
-/** Bookmarks whose URL is open right now — what the "Open now" filter must yield. */
+/**
+ * Records the list is showing that are open in a tab right now.
+ *
+ * Scoped to `active`, because that is the view the manager opens on. Counting every stored
+ * record regardless of status would be the same class of mistake this file exists for: a
+ * number about one set, printed beside two numbers about another.
+ */
 const reallyOpen = Number(await s.evaluate(`(async () => {
   const db = await new Promise((res, rej) => {
     const r = indexedDB.open('bookmarkguru');
@@ -69,13 +83,13 @@ const reallyOpen = Number(await s.evaluate(`(async () => {
   });
   const tabs = await chrome.tabs.query({});
   const open = new Set(tabs.map(t => t.url).filter(Boolean));
-  return stored.filter(b => open.has(b.url)).length;
+  return stored.filter(b => b.status === 'active' && open.has(b.url)).length;
 })()`));
 
 console.log('\n=== COUNTS ===');
 console.log('  open tabs (chrome) :', liveTabs.total);
 console.log('  sidebar "Open tabs":', sidebarTabCount);
-console.log('  toolbar "Open now" :', toggleCount);
+console.log('  status bar "open"  :', statusOpen);
 console.log('  bookmarks open now :', reallyOpen);
 
 // The regression itself: these two numbers were the same control's, and were not equal.
@@ -86,8 +100,13 @@ await s.evaluate(`${navItem('Open tabs')}?.click()`);
 await wait(1200);
 
 const tabRows = Number(await s.evaluate(`document.querySelectorAll('.row--tab').length`));
-const groupChips = await s.evaluate(
-  `[...document.querySelectorAll('.row--tab .chip')].map(c => c.textContent.trim())`);
+// Selecting a tab puts its group and window in the detail pane. The row carries neither:
+// the tags a capture would write are computed once, by `sourceTagsFor`, and shown there.
+await s.evaluate(`document.querySelectorAll('.row--tab')[0]?.click()`);
+await wait(500);
+const rowChips = Number(await s.evaluate(`document.querySelectorAll('.row--tab .chip').length`));
+const detailChips = await s.evaluate(
+  `[...document.querySelectorAll('.detail .chip')].map(c => c.textContent.trim())`);
 const noAmber = await s.evaluate(
   `[...document.querySelectorAll('.row--tab')].every(r => r.dataset.open === undefined)`);
 const saveButtons = Number(await s.evaluate(
@@ -97,7 +116,7 @@ const captureLabel = await s.evaluate(
 
 console.log('\n=== OPEN TABS VIEW ===');
 console.log('  tab rows           :', tabRows);
-console.log('  group chips        :', JSON.stringify(groupChips));
+console.log('  detail chips       :', JSON.stringify(detailChips));
 console.log('  per-row Save shown :', saveButtons);
 console.log('  capture button     :', captureLabel);
 
@@ -188,12 +207,13 @@ const checks = [
   ['a write into a non-empty store does not fail', errorBanner === '(none)'],
   ['the manager, not the worker, answers save-open-tabs', ack?.ok === true],
   ['the command captures a tab opened after the first pass', lateCaptured === true],
-  ['"Open now" is no longer a sidebar view', sidebarHasOpenNow === false],
+  ['"Open now" is not a sidebar view', sidebarHasOpenNow === false],
   ['sidebar "Open tabs" count matches the browser', sidebarTabCount === liveTabs.total],
-  ['"Open now" counts bookmarks, not tabs', toggleCount === reallyOpen],
-  ['…and that is a different number from the tab count', toggleCount !== liveTabs.total],
+  ['the status bar\'s "open" counts records, not tabs', statusOpen === reallyOpen],
+  ['…and that is a different number from the tab count', statusOpen !== liveTabs.total],
   ['every open tab is listed', tabRows === liveTabs.total],
-  ['a tab group renders as a chip', groupChips.includes('E2E Group')],
+  ['no chips on a tab row', rowChips === 0],
+  ['the tab detail names the window a capture would tag', detailChips.some((c) => /^Window \d+$/.test(c))],
   ['no row claims the amber open-now state', noAmber === true],
   ['unsaveable tabs get no Save action', saveButtons < tabRows],
   ['the capture button promises what it adds', promised === after.total - before],

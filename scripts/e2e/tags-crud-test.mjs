@@ -8,9 +8,10 @@
  *      `Bookmark.tags` holding ids, and the only way to see it is to read the record's raw
  *      tag ids back out of IndexedDB before and after — resolved to names they would look
  *      identical either way.
- *   2. **A tag on zero records is still reachable.** The sidebar hides it by design, so if
- *      the tag view hid it too the tag would exist in the database with no surface able to
- *      delete it. A DOM-only assertion cannot tell "absent" from "never written".
+ *   2. **A tag on zero records is still reachable.** Narrowing is a search over records
+ *      now, and no search over records can reach a tag no record carries — so if the tag
+ *      view hid it too, the tag would exist in the database with no surface able to rename
+ *      or delete it. A DOM-only assertion cannot tell "absent" from "never written".
  *   3. **Deleting a tag deletes no link.** It is the one destructive act here and it has no
  *      undo, so "the bookmark count is unchanged" is a correctness claim.
  *
@@ -195,7 +196,7 @@ const detached = await stored();
 check('the tag came off the record', detached.seedTagIds?.join('|') === `tag:${ALPHA}`);
 check('but the tag record survives', detached.mine.length === 2);
 
-// ── the tag view shows it anyway — the sidebar would not ──────────────────────
+// ── the tag view shows it anyway — no search over records could ───────────────
 await view('Tags');
 await search('zqtag');
 await wait(500);
@@ -242,6 +243,46 @@ check('amber is not offered — it is reserved for open-in-a-tab',
   Number(await s.evaluate('document.querySelectorAll(\'.swatch[data-color="amber"]\').length')) === 0);
 check('the other nine colours are',
   Number(await s.evaluate('document.querySelectorAll(".swatch").length')) === 9);
+
+// ── the drill-down delivers the number on the button ──────────────────────────
+// The claim: `Show N links` lands on exactly N rows. A search for the tag's name would
+// also match titles and URLs, so this is the one narrowing that cannot be typed — and the
+// count and the list have to be the same number (gotcha #12).
+const promisedByButton = Number(
+  /Show (\d+) link/.exec(await s.evaluate(`(() => {
+    const b = [...document.querySelectorAll('.detail .btn')].find(x => /^Show \\d+ link/.test(x.textContent.trim()));
+    return b ? b.textContent.trim() : '';
+  })()`))?.[1] ?? 'NaN');
+
+await s.evaluate(`[...document.querySelectorAll('.detail .btn')]
+  .find(x => /^Show \\d+ link/.test(x.textContent.trim()))?.click()`);
+await wait(800);
+
+const scoped = JSON.parse(await s.evaluate(`JSON.stringify({
+  rows: document.querySelectorAll('.row--bookmark').length,
+  scope: document.querySelector('.scope')?.textContent?.trim() ?? '(none)',
+  query: document.querySelector('.search')?.value ?? '',
+})`));
+
+check('the drill-down shows the number the button promised',
+  promisedByButton > 0 && scoped.rows === promisedByButton);
+check('the toolbar names the tag the list is scoped to', scoped.scope.includes(GAMMA));
+check('and it did not smuggle the name into the search box', scoped.query === '');
+
+// Leaving the scope has to be possible from the scope itself.
+await clickSelector('.scope');
+await wait(600);
+check('clicking the scope clears it',
+  (await s.evaluate(`!!document.querySelector('.scope')`)) === false);
+check('and the list widens again',
+  Number(await s.evaluate(`document.querySelectorAll('.row--bookmark').length`)) > scoped.rows);
+
+// Back to the tag, for the delete assertions below.
+await view('Tags');
+await search('zqtag');
+await wait(500);
+await clickRow((await shown()).rows.findIndex((r) => r.title === GAMMA));
+await wait(400);
 
 // ── delete: two clicks, and no link goes with it ──────────────────────────────
 const beforeDelete = await stored();

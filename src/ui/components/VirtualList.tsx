@@ -22,45 +22,57 @@ import { For, createEffect, createMemo, createSignal, onCleanup, type Accessor, 
 
 const OVERSCAN = 8;
 
-let cachedRowH: number | null = null;
+const cachedRowH = new Map<string, number>();
 
 /**
  * Row height in pixels, measured from the stylesheet rather than hardcoded.
  *
- * This number and `--row-h` must agree exactly: if they drift, rows overlap or leave
- * gaps and the scrollbar lies about the list length. `--row-h` derives from `--scale`,
+ * This number and the token must agree exactly: if they drift, rows overlap or leave
+ * gaps and the scrollbar lies about the list length. The tokens derive from `--scale`,
  * so a hardcoded copy here breaks the list the moment anyone resizes the UI.
  *
- * ⚠️ **Measured through a probe element, not `getPropertyValue('--row-h')`.** Custom
- * properties substitute lazily, so reading one back returns its *token text* — with a
- * calc-derived value that is the literal string `"calc(34px * 1.75)"`, which
- * `parseFloat` turns into `NaN`. Laying an element out is the only way to make the
- * browser resolve it. This was live for one commit: CSS drew 59.5px rows while the
- * windowing arithmetic used the 34px fallback.
+ * Keyed by token, because the lists are not all the same height: a bookmark row is two
+ * lines and a tab or tag row is one. A single cached number would window one of them
+ * against the other's height.
+ *
+ * ⚠️ **Measured through a probe element, not `getPropertyValue()`.** Custom properties
+ * substitute lazily, so reading one back returns its *token text* — with a calc-derived
+ * value that is the literal string `"calc(34px * 1.75)"`, which `parseFloat` turns into
+ * `NaN`. Laying an element out is the only way to make the browser resolve it. This was
+ * live for one commit: CSS drew 59.5px rows while the windowing arithmetic used the 34px
+ * fallback.
  *
  * Resolved on first use rather than at module load — the dev server injects CSS through
  * JS, so at evaluation time the property may not exist yet. Cached after that: it
  * cannot change without a reload, and re-measuring would force a synchronous layout on
  * every scroll event.
  */
-function rowH(): number {
-  if (cachedRowH !== null) return cachedRowH;
+function rowH(token: string): number {
+  const hit = cachedRowH.get(token);
+  if (hit !== undefined) return hit;
 
   const probe = document.createElement('div');
-  probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;height:var(--row-h)';
+  probe.style.cssText = `position:absolute;visibility:hidden;pointer-events:none;height:var(${token})`;
   document.body.appendChild(probe);
   const measured = probe.getBoundingClientRect().height;
   probe.remove();
 
   // A missing token measures 0, which would divide the windowing maths by zero and
   // render an empty list with no error anywhere. Fall back to the design default.
-  cachedRowH = measured > 0 ? measured : 34;
-  return cachedRowH;
+  const resolved = measured > 0 ? measured : 34;
+  cachedRowH.set(token, resolved);
+  return resolved;
 }
 
 export function VirtualList<T>(props: {
   items: readonly T[];
   ariaLabel: string;
+  /**
+   * Custom property holding this list's row height. Defaults to the one-line `--row-h`;
+   * the bookmark list is two lines and passes its own. Whatever is passed has to match
+   * what CSS actually draws for that list's rows — see `rowH` above.
+   */
+  rowHeightVar?: string;
   /** Index of the keyboard cursor. Owned by the parent; see the note above. */
   cursor: number;
   onCursor: (index: number) => void;
@@ -77,6 +89,8 @@ export function VirtualList<T>(props: {
   /** Renders one row. The index accessor is absolute, not relative to the window. */
   children: (item: T, index: Accessor<number>) => JSX.Element;
 }) {
+  const rowHeight = () => rowH(props.rowHeightVar ?? '--row-h');
+
   const [scrollEl, setScrollEl] = createSignal<HTMLDivElement>();
   const [scrollTop, setScrollTop] = createSignal(0);
   const [viewportH, setViewportH] = createSignal(600);
@@ -94,8 +108,8 @@ export function VirtualList<T>(props: {
 
   const range = createMemo(() => {
     const total = props.items.length;
-    const start = Math.max(0, Math.floor(scrollTop() / rowH()) - OVERSCAN);
-    const visible = Math.ceil(viewportH() / rowH()) + OVERSCAN * 2;
+    const start = Math.max(0, Math.floor(scrollTop() / rowHeight()) - OVERSCAN);
+    const visible = Math.ceil(viewportH() / rowHeight()) + OVERSCAN * 2;
     return { start, end: Math.min(total, start + visible) };
   });
 
@@ -113,10 +127,10 @@ export function VirtualList<T>(props: {
     const el = scrollEl();
     if (!el || index < 0) return;
 
-    const top = index * rowH();
+    const top = index * rowHeight();
     if (top < el.scrollTop) el.scrollTop = top;
-    else if (top + rowH() > el.scrollTop + el.clientHeight) {
-      el.scrollTop = top + rowH() - el.clientHeight;
+    else if (top + rowHeight() > el.scrollTop + el.clientHeight) {
+      el.scrollTop = top + rowHeight() - el.clientHeight;
     }
   });
 
@@ -176,14 +190,14 @@ export function VirtualList<T>(props: {
       onKeyDown={onKeyDown}
     >
       {/* Spacer gives the scrollbar the full height of the unwindowed list. */}
-      <div style={{ height: `${props.items.length * rowH()}px`, position: 'relative' }}>
+      <div style={{ height: `${props.items.length * rowHeight()}px`, position: 'relative' }}>
         <div
           style={{
             position: 'absolute',
             top: 0,
             left: 0,
             right: 0,
-            transform: `translateY(${range().start * rowH()}px)`,
+            transform: `translateY(${range().start * rowHeight()}px)`,
           }}
         >
           <For each={windowed()}>

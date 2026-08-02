@@ -29,9 +29,9 @@
    * 1 is the original density, tuned for a desktop display. Higher suits a laptop
    * or Chromebook panel, where the same CSS pixel is physically smaller.
    *
-   * ⚠️ `--row-h` is read by `BookmarkList.tsx` at startup to do its windowing
-   * arithmetic. It reads this computed value rather than hardcoding one, so
-   * changing the scale here is enough — but the row must stay a *fixed* height.
+   * ⚠️ The row-height tokens below are measured by `VirtualList.tsx` at startup to do
+   * its windowing arithmetic. It resolves them through a probe rather than hardcoding
+   * one, so changing the scale here is enough — but a row must stay a *fixed* height.
    * See gotcha #3.
    */
   --scale: 1.5;
@@ -48,7 +48,14 @@
   --text-xl: calc(19px * var(--scale));
 
   /* ── density ─────────────────────────────────────────────────────────────── */
+  /* One line: tab and tag rows. */
   --row-h: calc(34px * var(--scale));
+  /*
+   * Two lines: a bookmark or tab row, title above domain. Stacking spends height, which
+   * a scrolling list has, so that no field needs a fixed-width column, which is what left
+   * titles with nothing.
+   */
+  --row-h-2: calc(50px * var(--scale));
   --control-h: calc(28px * var(--scale));
   --pane-pad: calc(12px * var(--scale));
   --gap-xs: calc(4px * var(--scale));

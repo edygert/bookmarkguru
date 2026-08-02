@@ -122,6 +122,11 @@ export function TagDetail(props: { tag: Tag | undefined }) {
                 <dt>Archive</dt>
                 <dd>{usage().archived}</dd>
               </dl>
+              {/*
+                Scoped by tag id, so the list it lands on is exactly these records — which
+                is what lets the button carry the number. A search for the name would also
+                match titles and URLs and deliver more rows than it promised.
+              */}
               <Show when={usage().total > 0}>
                 <button
                   type="button"

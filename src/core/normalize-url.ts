@@ -129,12 +129,12 @@ export function normalizeForMatch(raw: string): string {
 }
 
 /**
- * Host used for the domain column and the domain filter.
+ * Host used for the domain column and for sorting by domain.
  *
  * Hostless schemes (`file:`, and anything else without an authority) fall back to the
  * scheme itself rather than an empty string. The domain leads every row, so an empty
- * value would leave a bare placeholder there; `file://` is both honest and groupable,
- * which makes "show me my local files" work as an ordinary domain filter.
+ * value would leave a bare placeholder there, and `file://` both names the scheme and
+ * sorts every local file together.
  *
  * Returns '' only when the input cannot be parsed at all.
  */

@@ -5,11 +5,13 @@ import type { OpenTab } from '../state/library';
 /**
  * One open tab.
  *
- * Shares `.row` with the bookmark list — same height, same domain-leads layout, so the
- * two views scan identically — but **never sets `data-open`**. Amber means "this link is
- * open in a tab right now", and in a list where that is true of every row it says
- * nothing. The fact worth signalling here is the opposite one: whether the tab is
- * already in the library. That gets the dot, and unsaved rows get the action.
+ * Two lines, like a bookmark row — title, then domain — so the two URL lists scan
+ * identically. Its group and window live in `TabDetail`, not on the row.
+ *
+ * **Never sets `data-open`.** Amber means "this link is open in a tab right now", and in
+ * a list where that is true of every row it says nothing. The fact worth signalling here
+ * is the opposite one: whether the tab is already in the library. That gets the dot, and
+ * unsaved rows get the action.
  *
  * A `div` rather than a `button`, because the Save control nests inside the row and a
  * button inside a button is invalid.
@@ -35,21 +37,14 @@ export function TabRow(props: {
     >
       <span class="row__dot" aria-label={saved() ? 'Already saved' : undefined} />
       <Favicon url={props.tab.url} />
-      <span class="row__domain">{props.tab.domain || '—'}</span>
-      <span class="row__title">{props.tab.title}</span>
 
-      <span class="row__tags">
-        <Show when={props.tab.groupTitle}>
-          {(title) => (
-            <span
-              class="chip"
-              style={{ '--tag-color': `var(--tag-${props.tab.groupColor ?? 'slate'})` }}
-            >
-              {title()}
-            </span>
-          )}
-        </Show>
-        <span class="row__meta">W{props.tab.windowOrdinal}</span>
+      <span class="row__body">
+        <span class="row__line">
+          <span class="row__title">{props.tab.title}</span>
+        </span>
+        <span class="row__line">
+          <span class="row__domain">{props.tab.domain || '—'}</span>
+        </span>
       </span>
 
       <Switch>

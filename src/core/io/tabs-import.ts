@@ -58,6 +58,36 @@ export function windowOrdinals(tabs: readonly TabLike[]): Map<number, number> {
   return new Map(ids.map((id, i) => [id, i + 1]));
 }
 
+/**
+ * The tags a capture would put on this tab: its group, then its window ordinal.
+ *
+ * Exported because `TabDetail` shows them before anything is saved. One implementation,
+ * so what the UI displays cannot differ from what a capture writes.
+ */
+export function sourceTagsFor(
+  tab: TabLike,
+  groupById: ReadonlyMap<number, TabGroupLike>,
+  ordinals: ReadonlyMap<number, number>,
+  tagWindows = true,
+): SourceTag[] {
+  // Chrome uses -1 for an ungrouped tab, so a plain `!== undefined` check is not enough.
+  const group = tab.groupId !== undefined && tab.groupId >= 0
+    ? groupById.get(tab.groupId)
+    : undefined;
+  const groupTitle = group?.title?.trim();
+
+  const tags: SourceTag[] = [];
+  // An untitled group carries no name worth a tag.
+  if (groupTitle) {
+    tags.push({ name: groupTitle, color: mapChromeGroupColor(group?.color) });
+  }
+
+  const ordinal = tab.windowId === undefined ? undefined : ordinals.get(tab.windowId);
+  if (tagWindows && ordinal !== undefined) tags.push({ name: `Window ${ordinal}` });
+
+  return tags;
+}
+
 /** Flatten tabs to entries. Unusable URLs are left for `ingest` to count as skipped. */
 export function tabsToEntries(
   tabs: readonly TabLike[],
@@ -72,21 +102,11 @@ export function tabsToEntries(
   for (const tab of tabs) {
     if (!tab.url) continue;
 
-    // Chrome uses -1 for an ungrouped tab, so a plain `!== undefined` check is not enough.
     const group = tab.groupId !== undefined && tab.groupId >= 0
       ? groupById.get(tab.groupId)
       : undefined;
     const groupTitle = group?.title?.trim();
-
-    const sourceTags: SourceTag[] = [];
-    // An untitled group carries no meaning worth a tag, but it does keep its colour, so
-    // the row still reads as grouped in the list.
-    if (groupTitle) {
-      sourceTags.push({ name: groupTitle, color: mapChromeGroupColor(group?.color) });
-    }
-
-    const ordinal = tab.windowId === undefined ? undefined : ordinals.get(tab.windowId);
-    if (tagWindows && ordinal !== undefined) sourceTags.push({ name: `Window ${ordinal}` });
+    const sourceTags = sourceTagsFor(tab, groupById, ordinals, tagWindows);
 
     entries.push({
       url: tab.url,

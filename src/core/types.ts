@@ -86,7 +86,7 @@ export interface Bookmark {
   url: string;
   /** Derived key used for matching and dedupe. Never displayed. */
   normalizedUrl: string;
-  /** Derived, indexed, used for domain filtering and grouping. */
+  /** Derived and indexed. Shown under the title, and a sort option. */
   domain: string;
   title: string;
   description: string;
@@ -119,15 +119,26 @@ export interface Tag {
   parent?: string;
 }
 
+/**
+ * The view, and what it is scoped to.
+ *
+ * `status` is the view — Library, Inbox and Archive are three values of this one field,
+ * which is why they partition the library and why exactly one can be current.
+ *
+ * There is no tag *list*, domain list or open-now filter, and none should be added: the
+ * text match reads `url` and tag *names*, so a bare host or a tag name narrows the list
+ * without a control of its own.
+ *
+ * `tag` is different, and is the one thing typing cannot do: it selects records **by tag
+ * id**, so it returns exactly the records carrying that tag rather than everything whose
+ * text happens to contain its name. It is set only by drilling into a row of the Tags
+ * view, never by a control of its own, and the toolbar shows it while it is on.
+ */
 export interface Filters {
-  tags?: string[];
-  /** `all` = must have every listed tag; `any` = at least one. Defaults to `all`. */
-  tagMode?: 'all' | 'any';
-  domains?: string[];
   /** Defaults to `['active']` so inbox and archived stay out of the way. */
   status?: BookmarkStatus[];
-  /** Restrict to bookmarks whose URL is open in some tab right now. */
-  openNow?: boolean;
+  /** Tag id. Set by the Tags view's drill-down; there is no other way to turn it on. */
+  tag?: string;
 }
 
 export type SortField =
