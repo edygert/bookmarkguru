@@ -39,7 +39,7 @@ export interface BookmarkGuruDB extends DBSchema {
     value: Tag;
     indexes: { name: string };
   };
-  /** Settings, serialized search index, first-run marker. */
+  /** Settings and the serialized search index. */
   meta: {
     key: string;
     value: { key: string; value: unknown };
@@ -72,7 +72,6 @@ export function upgrade(db: IDBPDatabase<BookmarkGuruDB>, oldVersion: number): v
 /** Keys used in the `meta` store. Centralised so they cannot drift apart. */
 export const META = {
   schemaVersion: 'schemaVersion',
-  firstRunComplete: 'firstRunComplete',
   searchIndex: 'searchIndex',
   settings: 'settings',
 } as const;

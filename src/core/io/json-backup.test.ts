@@ -29,7 +29,6 @@ const RECORD: Bookmark = {
   openCount: 7,
   status: 'archived',
   source: {
-    kind: 'chrome-import',
     importedAt: 1_600_000_000_000,
     originalFolderPath: 'P1/SHARED',
     chromeId: '42',

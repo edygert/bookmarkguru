@@ -99,7 +99,7 @@ function Popup() {
         lastOpenedAt: null,
         openCount: 0,
         status: 'active',
-        source: { kind: 'manual' },
+        source: {},
       });
     }
 

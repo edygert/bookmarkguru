@@ -6,8 +6,8 @@ import { TagList } from './components/TagList';
 import { DetailPane } from './components/DetailPane';
 import { TagDetail } from './components/TagDetail';
 import { EmptyState } from './components/EmptyState';
-import { library } from './state/library';
-import type { ImportSummary, SortField } from '~/core/types';
+import { library, type ImportOutcome } from './state/library';
+import type { SortField } from '~/core/types';
 
 const SORTS: { field: SortField; label: string }[] = [
   { field: 'createdAt', label: 'Date added' },
@@ -22,9 +22,20 @@ const SORTS: { field: SortField; label: string }[] = [
  * side panel — the same components, composed differently, rather than a second app.
  */
 export function App(props: { compact?: boolean }) {
-  const [importing, setImporting] = createSignal(false);
-  const [summary, setSummary] = createSignal<ImportSummary | null>(null);
+  const [outcome, setOutcome] = createSignal<ImportOutcome | null>(null);
   let searchRef: HTMLInputElement | undefined;
+
+  /** One source of truth, so the sidebar and this pane cannot disagree about it. */
+  const importing = () => library.importProgress() !== null;
+
+  const imported = () => {
+    const result = outcome();
+    return result?.ok ? result.summary : null;
+  };
+  const importFailed = () => {
+    const result = outcome();
+    return result && !result.ok ? result.error : null;
+  };
 
   onMount(() => {
     void library.load();
@@ -46,18 +57,10 @@ export function App(props: { compact?: boolean }) {
     onCleanup(() => document.removeEventListener('keydown', onKeyDown));
   });
 
-  const runImport = async () => {
-    setImporting(true);
-    setSummary(await library.importFromChrome());
-    setImporting(false);
-  };
+  const runImport = async () => setOutcome(await library.importFromChrome());
 
   /** Capture whatever the tab list is currently showing, search filter included. */
-  const runTabCapture = async () => {
-    setImporting(true);
-    setSummary(await library.saveTabs(library.visibleTabs()));
-    setImporting(false);
-  };
+  const runTabCapture = async () => setOutcome(await library.saveTabs(library.visibleTabs()));
 
   const onTabs = () => library.view() === 'tabs';
   const onTags = () => library.view() === 'tags';
@@ -244,10 +247,11 @@ export function App(props: { compact?: boolean }) {
             <Show when={isEmpty()}>
               <EmptyState
                 title="Bring your bookmarks across"
-                body="Import from Chrome to get started. Folders become tags, so you can find a link by any of them instead of remembering where you filed it. Your Chrome bookmarks are left untouched."
+                body="Import from Chrome, or use the sidebar to import an exported bookmarks file. Folders become tags, so you can find a link by any of them instead of remembering where you filed it. Your Chrome bookmarks are left untouched."
                 actionLabel="Import from Chrome"
                 onAction={() => void runImport()}
                 busy={importing()}
+                busyLabel={library.importProgress()?.label}
                 secondaryLabel={
                   library.openTabs().length > 0
                     ? `Or capture ${library.openTabs().length} open tabs`
@@ -294,14 +298,16 @@ export function App(props: { compact?: boolean }) {
             </Match>
           </Switch>
 
-          <Show when={summary()}>
+          {/* The side panel has no sidebar, so this is where its imports report. */}
+          <Show when={imported()}>
             {(s) => (
               <span>
                 Saved {s().added} · {s().alreadySaved} already saved · {s().skipped} skipped
               </span>
             )}
           </Show>
-          <Show when={!props.compact && !summary()}>
+          <Show when={importFailed()}>{(error) => <span>Import failed. {error()}</span>}</Show>
+          <Show when={!props.compact && !outcome()}>
             <span>
               <kbd>/</kbd> search <kbd>j</kbd>/<kbd>k</kbd> move{' '}
               <kbd>↵</kbd> {enterLabel()}

@@ -33,7 +33,7 @@ try {
 }
 
 const entries = htmlToEntries(readFileSync(path, 'utf8'));
-const result = ingest(entries, { kind: 'html-import', now: Date.now(), rules });
+const result = ingest(entries, { now: Date.now(), rules });
 
 const pct = (n: number, of: number) => (of === 0 ? '0' : ((n / of) * 100).toFixed(1));
 const pad = (n: number, w = 5) => String(n).padStart(w);

@@ -113,11 +113,6 @@ describe('tabsToBookmarks', () => {
     expect(bookmarks.map((b) => b.status)).toEqual(['inbox', 'inbox']);
   });
 
-  it('stamps the tab-import source kind', () => {
-    const { bookmarks } = tabsToBookmarks([tab()], { now: NOW });
-    expect(bookmarks[0]!.source.kind).toBe('tab-import');
-  });
-
   it('records the window and group on the record, not only as tags', () => {
     const { bookmarks } = tabsToBookmarks(
       [tab({ windowId: 42, groupId: 5 })],

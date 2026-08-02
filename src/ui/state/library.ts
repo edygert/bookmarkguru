@@ -16,7 +16,6 @@ import { tagIdFromName } from '~/core/ids';
 import { tabsToBookmarks, windowOrdinals, type TabGroupLike } from '~/core/io/tabs-import';
 import { domainOf, isIngestable, normalizeForDedupe, normalizeForMatch } from '~/core/normalize-url';
 import { runQuery } from '~/core/search/query';
-import { META } from '~/core/db/schema';
 import { broadcast, send } from '~/shared/messages';
 import type {
   Bookmark, BookmarkStatus, Filters, ImportSummary, SortSpec, Tag,
@@ -394,36 +393,77 @@ async function refreshOpenTabs(): Promise<void> {
   }
 }
 
-const EMPTY_SUMMARY: ImportSummary = {
-  added: 0, alreadySaved: 0, skipped: 0, tagsCreated: 0, inboxed: 0,
-};
-
-/**
- * One-directional migration from Chrome's bookmark tree. Runs in the page context,
- * not the worker, so a large import cannot be killed halfway by worker termination.
- */
 const rules: FolderRules = folderRules;
 
-async function importFromChrome(): Promise<ImportSummary> {
-  return runImport(async () =>
+/**
+ * What an import is doing right now. `null` when none is running.
+ *
+ * `total` 0 means there is no honest denominator yet — reading and parsing have no
+ * countable steps — so the bar is omitted and only the label shows.
+ */
+export interface ImportProgress {
+  label: string;
+  done: number;
+  total: number;
+}
+
+const [importProgress, setImportProgress] = createSignal<ImportProgress | null>(null);
+
+/** Either a summary or the reason there isn't one. All-zero counts are a real result. */
+export type ImportOutcome =
+  | { ok: true; summary: ImportSummary }
+  | { ok: false; error: string };
+
+/**
+ * The live bookmark tree. Runs in the page context, not the worker, so a large import
+ * cannot be killed halfway by worker termination.
+ */
+async function importFromChrome(): Promise<ImportOutcome> {
+  return runImport('Reading Chrome bookmarks…', async () =>
     chromeTreeToBookmarks(await chrome.bookmarks.getTree(), { rules }));
 }
 
 /**
- * Import an exported bookmarks HTML file.
+ * Exported bookmark files — the same import, from a snapshot instead of the live tree.
  *
- * Same rules as the live path — they share `folder-tags.ts` and `ingest.ts` — but reading
- * a file lets the same input be imported repeatedly while tag rules are being tuned,
- * which a live tree that changes underneath you does not.
+ * One `runImport` per file rather than one over all of them: each ends with `load()`, so
+ * the next file dedupes against the records the previous one just wrote. The first file to
+ * supply a URL keeps its title and tags.
  */
-async function importFromHtmlFile(file: File): Promise<ImportSummary> {
-  return runImport(async () => htmlToBookmarks(await file.text(), { rules }));
+async function importFromFiles(files: readonly File[]): Promise<ImportOutcome> {
+  const totals: ImportSummary = {
+    added: 0, alreadySaved: 0, skipped: 0, tagsCreated: 0, inboxed: 0,
+  };
+
+  for (const [index, file] of files.entries()) {
+    const prefix = files.length > 1 ? `File ${index + 1} of ${files.length} · ` : '';
+    const outcome = await runImport(`${prefix}Reading ${file.name}…`, async () => {
+      const text = await file.text();
+      setImportProgress({ label: `${prefix}Parsing ${file.name}…`, done: 0, total: 0 });
+      return htmlToBookmarks(text, { rules });
+    });
+
+    if (!outcome.ok) return outcome;
+    for (const key of Object.keys(totals) as (keyof ImportSummary)[]) {
+      totals[key] += outcome.summary[key];
+    }
+  }
+
+  return { ok: true, summary: totals };
 }
 
 /** Shared write path: dedupe against the library, chunk the writes, refresh, broadcast. */
-async function runImport(produce: () => Promise<ImportResult>): Promise<ImportSummary> {
+async function runImport(
+  label: string,
+  produce: () => Promise<ImportResult>,
+): Promise<ImportOutcome> {
   setState('loading', true);
+  setImportProgress({ label, done: 0, total: 0 });
   try {
+    // `ingest` is synchronous and is the slow part of a large export, so the label above
+    // has to reach the screen before it starts. Without this yield the whole import is
+    // one frozen frame and the progress line never paints.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     const { bookmarks, tags, summary } = await produce();
 
     // Anything already in the library wins; the import must not clobber edits.
@@ -433,24 +473,41 @@ async function runImport(produce: () => Promise<ImportResult>): Promise<ImportSu
     const mergedTags = unionTags(state.tags, tags);
     await repository.putTags(mergedTags);
 
-    // Chunked so one enormous transaction cannot stall the UI thread.
+    // Chunked so one enormous transaction cannot stall the UI thread. Each await returns
+    // to the event loop, which is what lets the count below repaint as it climbs. A
+    // re-import has nothing fresh to write, and announcing a save of nothing is a lie.
+    if (fresh.length > 0) {
+      setImportProgress({ label: 'Saving links…', done: 0, total: fresh.length });
+    }
     for (let i = 0; i < fresh.length; i += 500) {
       await repository.putMany(fresh.slice(i, i + 500));
+      setImportProgress({
+        label: 'Saving links…',
+        done: Math.min(i + 500, fresh.length),
+        total: fresh.length,
+      });
     }
-    await repository.setMeta(META.firstRunComplete, true);
 
     await load();
     broadcast({ kind: 'bookmarks-changed', ids: fresh.map((b) => b.id) });
 
     return {
-      ...summary,
-      added: fresh.length,
-      alreadySaved: summary.alreadySaved + (bookmarks.length - fresh.length),
-      inboxed: fresh.filter((b) => b.status === 'inbox').length,
+      ok: true,
+      summary: {
+        ...summary,
+        added: fresh.length,
+        alreadySaved: summary.alreadySaved + (bookmarks.length - fresh.length),
+        inboxed: fresh.filter((b) => b.status === 'inbox').length,
+      },
     };
   } catch (error) {
-    setState({ loading: false, error: describe(error) });
-    return EMPTY_SUMMARY;
+    // Reported through the return value rather than `state.error`, for the reason
+    // `restoreBackup` gives: a problem with the file you just picked belongs beside the
+    // picker, not in a banner over the list.
+    setState('loading', false);
+    return { ok: false, error: describe(error) };
+  } finally {
+    setImportProgress(null);
   }
 }
 
@@ -502,9 +559,6 @@ async function restoreBackup(
     for (let i = 0; i < bookmarks.length; i += 500) {
       await repository.putMany(bookmarks.slice(i, i + 500));
     }
-    // `clearAll` wipes `meta` too, so without this a restored library would come back
-    // showing the first-run empty state over several thousand records.
-    await repository.setMeta(META.firstRunComplete, true);
 
     // Every id the UI was pointing at is gone. The narrowing filters matter most: a stale
     // tag id or domain still narrows the query, so leaving either set would show an empty
@@ -539,10 +593,10 @@ async function restoreBackup(
  * subset must keep the numbering the user was looking at — otherwise capturing one
  * window's worth of rows labels them `Window 1` whichever window they came from.
  */
-async function saveTabs(tabs: readonly OpenTab[]): Promise<ImportSummary> {
+async function saveTabs(tabs: readonly OpenTab[]): Promise<ImportOutcome> {
   const ordinals = windowOrdinals(rawTabs());
 
-  return runImport(async () =>
+  return runImport('Saving tabs…', async () =>
     tabsToBookmarks(tabs, {
       groups: rawGroups(),
       windowOrdinals: ordinals,
@@ -551,7 +605,7 @@ async function saveTabs(tabs: readonly OpenTab[]): Promise<ImportSummary> {
 }
 
 /** Capture everything open, ignoring whatever the search box is narrowing to. */
-async function saveAllOpenTabs(): Promise<ImportSummary> {
+async function saveAllOpenTabs(): Promise<ImportOutcome> {
   return saveTabs(openTabs());
 }
 
@@ -852,7 +906,7 @@ export const library = {
   setQuery, setFilters, setSort, setSelectedId, setSelectedTagId,
   showStatus, showTabs, showTags, showRecordsForTag, selectTab,
   filterToDomain, clearFilters,
-  load, watch, refreshOpenTabs, importFromChrome, importFromHtmlFile,
+  load, watch, refreshOpenTabs, importFromChrome, importFromFiles, importProgress,
   exportBackup, restoreBackup,
   saveTabs, saveAllOpenTabs, focusTab,
   activate, updateBookmark, removeBookmark,

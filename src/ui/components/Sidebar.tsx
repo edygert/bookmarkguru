@@ -1,9 +1,15 @@
 import { For, Show, createSignal } from 'solid-js';
-import { library } from '../state/library';
+import { library, type ImportOutcome, type ImportProgress } from '../state/library';
 import { generalTagId } from '~/core/tags';
 import type { BookmarkStatus, Tag } from '~/core/types';
 
 const plural = (n: number) => (n === 1 ? 'link' : 'links');
+
+/** `Saving links… 3,140 / 5,002`, or the label alone while there is nothing to count. */
+const progressText = (progress: ImportProgress) =>
+  progress.total > 0
+    ? `${progress.label} ${progress.done.toLocaleString()} / ${progress.total.toLocaleString()}`
+    : progress.label;
 
 /**
  * How many domains the group shows before `+N more`.
@@ -46,6 +52,10 @@ export function Sidebar() {
   const [confirming, setConfirming] = createSignal(false);
   const [note, setNote] = createSignal<{ text: string; error: boolean } | null>(null);
   const [allDomains, setAllDomains] = createSignal(false);
+  const [importFiles, setImportFiles] = createSignal<File[]>([]);
+  const [importNote, setImportNote] = createSignal<{ text: string; error: boolean } | null>(null);
+
+  const importing = () => library.importProgress() !== null;
 
   const currentStatus = (): BookmarkStatus => library.filters.status?.[0] ?? 'active';
   /**
@@ -127,6 +137,62 @@ export function Sidebar() {
         : { text: outcome.error ?? 'Restore failed.', error: true },
     );
     if (outcome.ok) setFile(null);
+  };
+
+  /**
+   * Both sources report the same way, because they are the same import.
+   *
+   * A summary of all zeros is a real result — nothing in the file, or nothing new in it —
+   * and it used to be indistinguishable from a crash, which returned all zeros too.
+   * `added + alreadySaved + skipped` is the number of entries the parser produced.
+   */
+  const report = (outcome: ImportOutcome, fromFile: boolean) => {
+    if (!outcome.ok) {
+      setImportNote({ text: outcome.error, error: true });
+      return;
+    }
+
+    const { added, alreadySaved, skipped } = outcome.summary;
+    if (added + alreadySaved + skipped === 0) {
+      setImportNote({
+        text: fromFile ? 'No bookmarks in that file. Is it a browser export?' : 'No bookmarks found.',
+        error: true,
+      });
+    } else if (added === 0) {
+      setImportNote({
+        text: `Nothing new — all ${alreadySaved} ${plural(alreadySaved)} were already saved.`,
+        error: false,
+      });
+    } else {
+      setImportNote({
+        text: `Added ${added} · ${alreadySaved} already saved · ${skipped} skipped`,
+        error: false,
+      });
+    }
+  };
+
+  const runChromeImport = async () => {
+    setImportNote(null);
+    report(await library.importFromChrome(), false);
+  };
+
+  const runFileImport = async () => {
+    const files = importFiles();
+    if (files.length === 0) return;
+    setImportNote(null);
+    report(await library.importFromFiles(files), true);
+    setImportFiles([]);
+  };
+
+  /**
+   * Clearing the input's own value is what lets the *same* file be picked twice. The
+   * File objects are already captured, and re-importing one is a legitimate thing to do:
+   * it adds whatever is new and ignores the rest.
+   */
+  const chooseImport = (input: HTMLInputElement) => {
+    setImportFiles([...(input.files ?? [])]);
+    setImportNote(null);
+    input.value = '';
   };
 
   /** Clicking a tag toggles it, so filters compose without a separate UI. */
@@ -377,12 +443,84 @@ export function Sidebar() {
       </Show>
 
       {/*
-        Not a view, and deliberately not wearing `nav-item`. Everything in the groups above
-        replaces the list or narrows it; these two do neither. They live here rather than in
-        the toolbar because the sidebar is absent from the side panel, and replacing the whole
-        database should not be a click away in a strip you keep open while browsing.
+        One import, two sources. The live tree is what Chrome has now; a file is a snapshot,
+        which is the only difference anyone sees — everything downstream of the two parsers
+        is shared, including the dedupe that makes a re-import add only what is new.
+
+        Not a view, and deliberately not wearing `nav-item`.
       */}
-      <div class="sidebar__group">
+      <div class="sidebar__group sidebar__group--import">
+        <div class="sidebar__heading">Import</div>
+        <div class="sidebar__actions">
+          <button
+            type="button"
+            class="btn sidebar__chrome"
+            disabled={importing()}
+            onClick={() => void runChromeImport()}
+          >
+            Import from Chrome
+          </button>
+
+          <input
+            id="import-file"
+            class="sidebar__file"
+            type="file"
+            accept=".html,text/html"
+            multiple
+            onChange={(e) => chooseImport(e.currentTarget)}
+          />
+          <label class="btn sidebar__file-label" for="import-file">
+            <Show when={importFiles().length > 0} fallback="Import a file…">
+              {importFiles().length === 1
+                ? importFiles()[0]!.name
+                : `${importFiles().length} files`}
+            </Show>
+          </label>
+
+          {/* One click, not two: this only adds records, so there is nothing to confirm. */}
+          <Show when={importFiles().length > 0}>
+            <button
+              type="button"
+              class="btn btn--primary sidebar__import"
+              disabled={importing()}
+              onClick={() => void runFileImport()}
+            >
+              Import
+            </button>
+          </Show>
+
+          <Show when={library.importProgress()}>
+            {(progress) => (
+              <>
+                {/* Omitted while reading and parsing, which have no countable steps. */}
+                <Show when={progress().total > 0}>
+                  <progress
+                    class="sidebar__progress"
+                    value={progress().done}
+                    max={progress().total}
+                  />
+                </Show>
+                <p class="sidebar__note">{progressText(progress())}</p>
+              </>
+            )}
+          </Show>
+
+          <Show when={importNote()}>
+            {(shown) => (
+              <p class="sidebar__note" data-error={shown().error}>
+                {shown().text}
+              </p>
+            )}
+          </Show>
+        </div>
+      </div>
+
+      {/*
+        Not a view either. These live here rather than in the toolbar because the sidebar is
+        absent from the side panel, and replacing the whole database should not be a click
+        away in a strip you keep open while browsing.
+      */}
+      <div class="sidebar__group sidebar__group--backup">
         <div class="sidebar__heading">Backup</div>
         <div class="sidebar__actions">
           <button

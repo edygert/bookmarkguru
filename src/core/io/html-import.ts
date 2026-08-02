@@ -103,7 +103,6 @@ export function htmlToBookmarks(
 ): ImportResult {
   const { now, status, rules } = options;
   return ingest(htmlToEntries(html), {
-    kind: 'html-import',
     ...(now !== undefined && { now }),
     ...(status !== undefined && { status }),
     ...(rules !== undefined && { rules }),

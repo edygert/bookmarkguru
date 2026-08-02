@@ -108,7 +108,6 @@ export function tabsToBookmarks(
   const { now, status = 'inbox' } = options;
 
   return ingest(tabsToEntries(tabs, options), {
-    kind: 'tab-import',
     status,
     ...(now !== undefined && { now }),
   });

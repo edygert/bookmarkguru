@@ -100,7 +100,7 @@ export const READ_DB = `(async () => {
     count: bookmarks.length,
     tags: tags.map(t => t.name).sort(),
     items: bookmarks.map(b => ({
-      title: b.title, domain: b.domain, status: b.status, kind: b.source.kind,
+      title: b.title, domain: b.domain, status: b.status,
       folder: b.source.originalFolderPath, tags: b.tags.map(i => name[i]).sort(),
     })).sort((a, b) => a.title.localeCompare(b.title)),
   }, null, 2);

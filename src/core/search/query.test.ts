@@ -19,7 +19,7 @@ function bm(over: Partial<Bookmark> = {}): Bookmark {
     lastOpenedAt: null,
     openCount: 0,
     status: 'active' as BookmarkStatus,
-    source: { kind: 'manual' },
+    source: {},
     ...over,
   };
 }

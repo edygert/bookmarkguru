@@ -88,14 +88,6 @@ describe('chromeTreeToEntries — structure', () => {
 });
 
 describe('chromeTreeToBookmarks — composition', () => {
-  it('marks records with the chrome-import source kind', () => {
-    const result = chromeTreeToBookmarks(
-      tree([{ id: '1', title: 'ROOT', children: [link('10')] }]),
-      { now: NOW },
-    );
-    expect(result.bookmarks[0]!.source.kind).toBe('chrome-import');
-  });
-
   it('applies folder tagging to the walked tree', () => {
     const result = chromeTreeToBookmarks(tree([
       { id: '1', title: 'ROOT', children: [

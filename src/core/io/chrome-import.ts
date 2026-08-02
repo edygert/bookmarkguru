@@ -83,7 +83,6 @@ export function chromeTreeToBookmarks(
 ): ImportResult {
   const { now, status, skipRootFolders = true, rules } = options;
   return ingest(chromeTreeToEntries(roots, skipRootFolders), {
-    kind: 'chrome-import',
     ...(now !== undefined && { now }),
     ...(status !== undefined && { status }),
     ...(rules !== undefined && { rules }),

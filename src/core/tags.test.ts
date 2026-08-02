@@ -31,7 +31,7 @@ function bookmark(tags: string[]): Bookmark {
     lastOpenedAt: null,
     openCount: 0,
     status: 'active',
-    source: { kind: 'manual' },
+    source: {},
   };
 }
 

@@ -50,7 +50,9 @@ await wait(2000);
 // Read from a stable page — the popup closes itself after saving.
 const reader = await session(PORT, EXT_ID, 'src/ui/manager.html');
 const data = JSON.parse(await reader.evaluate(READ_DB));
-const saved = data.items.find((i) => i.kind === 'manual');
+// Identified by the title the popup auto-filled from the tab; a hand-saved record carries
+// no import provenance to find it by.
+const saved = data.items.find((i) => i.title === 'A Page Worth Keeping');
 console.log('  stored            :', JSON.stringify(saved));
 
 // ── popup: duplicate detection ────────────────────────────────────────────────
@@ -84,7 +86,7 @@ const checks = [
   ['popup auto-fills the tab title', title === 'A Page Worth Keeping'],
   ['popup offers Save for a new URL', buttonsBefore.includes('Save')],
   ['comma-separated tags parsed', JSON.stringify(saved?.tags) === JSON.stringify(['Reading', 'Rust'])],
-  ['saved as manual/active', saved?.kind === 'manual' && saved?.status === 'active'],
+  ['a hand-saved link lands in the library, not the inbox', saved?.status === 'active'],
   ['hostless URL gets a groupable domain', saved?.domain === 'file://'],
   ['popup shows the page it is about to save', page.favicon && page.domain === 'file://'],
   ['revisit detects "Already saved"', dupShown === true],

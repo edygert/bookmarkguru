@@ -146,11 +146,6 @@ describe('htmlToEntries — damaged input', () => {
 });
 
 describe('htmlToBookmarks — composition', () => {
-  it('marks records with the html-import source kind', () => {
-    const result = htmlToBookmarks(doc([{ folder: 'P1', children: [link(1)] }]), { now: NOW });
-    expect(result.bookmarks[0]!.source.kind).toBe('html-import');
-  });
-
   it('applies folder tagging to the parsed tree', () => {
     // Composition only — the rules themselves are folder-tags.ts's tests.
     const result = htmlToBookmarks(

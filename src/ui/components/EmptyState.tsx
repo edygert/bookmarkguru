@@ -10,6 +10,8 @@ export function EmptyState(props: {
   actionLabel?: string;
   onAction?: () => void;
   busy?: boolean;
+  /** What the import is doing right now, when it is saying so. */
+  busyLabel?: string;
   /** A second way out, when the obvious next step is not the only sensible one. */
   secondaryLabel?: string;
   onSecondary?: () => void;
@@ -26,7 +28,7 @@ export function EmptyState(props: {
             onClick={() => props.onAction?.()}
             disabled={props.busy}
           >
-            {props.busy ? 'Importing…' : props.actionLabel}
+            {props.busy ? props.busyLabel ?? 'Importing…' : props.actionLabel}
           </button>
         </Show>
         <Show when={props.secondaryLabel}>

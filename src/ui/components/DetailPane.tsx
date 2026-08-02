@@ -221,8 +221,6 @@ export function DetailPane(props: { bookmark: Bookmark | undefined }) {
                 <dd>{formatDate(bookmark().lastOpenedAt)}</dd>
                 <dt>Times opened</dt>
                 <dd>{bookmark().openCount}</dd>
-                <dt>Source</dt>
-                <dd>{bookmark().source.kind}</dd>
               </dl>
             </div>
 

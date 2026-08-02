@@ -154,6 +154,23 @@ button {
 
 .sidebar__file:focus-visible + .sidebar__file-label { border-color: var(--accent); }
 
+/* Determinate only. Shown while records are being written, absent while parsing. */
+.sidebar__progress {
+  width: 100%;
+  height: calc(4px * var(--scale));
+  appearance: none;
+  border: none;
+  background: var(--border);
+  border-radius: calc(2px * var(--scale));
+  overflow: hidden;
+}
+
+.sidebar__progress::-webkit-progress-bar { background: var(--border); }
+.sidebar__progress::-webkit-progress-value {
+  background: var(--accent);
+  transition: width 120ms linear;
+}
+
 .sidebar__note {
   margin: 0;
   font-size: var(--text-xs);

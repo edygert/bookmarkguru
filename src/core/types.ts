@@ -18,18 +18,12 @@
 export type BookmarkStatus = 'active' | 'inbox' | 'archived';
 
 /**
- * How a record entered the library.
+ * Where a record came from. Provenance only — nothing branches on any of it.
  *
- * Deliberately has no `json-restore` member. A restore writes records back exactly as
- * they were exported, `source` included, so it is not a source in its own right — a
- * record restored from a backup is still the chrome-import it always was. A member here
- * would invite overwriting that on the way in, which is the one thing a restore must not
- * do.
+ * A restore writes records back exactly as they were exported, `source` included, so a
+ * restored record keeps the provenance it was saved with.
  */
-export type SourceKind = 'manual' | 'chrome-import' | 'html-import' | 'tab-import';
-
 export interface SourceMeta {
-  kind: SourceKind;
   importedAt?: number;
   /** Folder path preserved verbatim from an import; also converted into tags. */
   originalFolderPath?: string;
@@ -154,9 +148,7 @@ export interface SortSpec {
  *
  * Records go in and come out verbatim — ids, notes, status, open counts, `Tag.parent` —
  * which is the whole difference between a restore and an import. Nothing derived is
- * carried: the `meta` store holds only a first-run marker (an inference, not data) and
- * the search index (rebuildable from the records, and a stale second copy of the truth
- * if stored).
+ * carried: the `meta` store holds settings and the search index, both rebuildable.
  */
 export interface BackupPayload {
   /**

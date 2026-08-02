@@ -29,7 +29,7 @@ describe('ingest — accounting', () => {
       entry(dup, ['P2']),        // duplicate → alreadySaved
       entry('chrome://settings'), // uningestable → skipped
     ];
-    const { summary } = ingest(entries, { kind: 'html-import', now: NOW });
+    const { summary } = ingest(entries, { now: NOW });
 
     expect(summary.added + summary.alreadySaved + summary.skipped).toBe(entries.length);
   });
@@ -37,7 +37,7 @@ describe('ingest — accounting', () => {
   it('reports tagsCreated as the number of tags it actually returns', () => {
     const result = ingest(
       [entry(url(), ['P1', 'SHARED']), entry(url(), ['P2', 'SHARED'])],
-      { kind: 'html-import', now: NOW },
+      { now: NOW },
     );
     expect(result.summary.tagsCreated).toBe(result.tags.length);
   });
@@ -47,7 +47,7 @@ describe('ingest — accounting', () => {
     const shared = url();
     const result = ingest(
       [entry(shared, [SESSION]), entry(shared, ['P1'])],
-      { kind: 'html-import', now: NOW, rules: RULES },
+      { now: NOW, rules: RULES },
     );
     const actual = result.bookmarks.filter((b) => b.status === 'inbox').length;
     expect(result.summary.inboxed).toBe(actual);
@@ -56,7 +56,7 @@ describe('ingest — accounting', () => {
   it('gives every record a distinct id', () => {
     const result = ingest(
       [entry(url()), entry(url()), entry(url())],
-      { kind: 'html-import', now: NOW },
+      { now: NOW },
     );
     const ids = result.bookmarks.map((b) => b.id);
     expect(new Set(ids).size).toBe(ids.length);
@@ -68,7 +68,7 @@ describe('ingest — dedupe and tag union', () => {
     const base = url();
     const result = ingest(
       [entry(base, ['P1']), entry(`${base}?utm_source=x`, ['P2'])],
-      { kind: 'html-import', now: NOW },
+      { now: NOW },
     );
     expect(result.bookmarks).toHaveLength(1);
   });
@@ -78,7 +78,7 @@ describe('ingest — dedupe and tag union', () => {
     const paths = [['P1'], ['P2'], ['P3']];
     const result = ingest(
       paths.map((p) => entry(shared, p)),
-      { kind: 'html-import', now: NOW },
+      { now: NOW },
     );
 
     expect(result.bookmarks).toHaveLength(1);
@@ -92,11 +92,11 @@ describe('ingest — dedupe and tag union', () => {
     const shared = url();
     const forward = ingest(
       [entry(shared, ['P1']), entry(shared, ['P2'])],
-      { kind: 'html-import', now: NOW },
+      { now: NOW },
     );
     const reverse = ingest(
       [entry(shared, ['P2']), entry(shared, ['P1'])],
-      { kind: 'html-import', now: NOW },
+      { now: NOW },
     );
     expect(forward.bookmarks[0]!.tags.sort()).toEqual(reverse.bookmarks[0]!.tags.sort());
   });
@@ -106,7 +106,7 @@ describe('ingest — status routing', () => {
   it('routes a session path to the inbox and a normal path to the library', () => {
     const result = ingest(
       [entry(url(), [SESSION, '2024-03-28']), entry(url(), ['P1'])],
-      { kind: 'html-import', now: NOW, rules: RULES },
+      { now: NOW, rules: RULES },
     );
     const statuses = result.bookmarks.map((b) => b.status).sort();
     expect(statuses).toEqual(['active', 'inbox']);
@@ -122,7 +122,7 @@ describe('ingest — status routing', () => {
     for (const order of [[SESSION, 'P1'], ['P1', SESSION]] as const) {
       const result = ingest(
         [entry(shared, [order[0]]), entry(shared, [order[1]])],
-        { kind: 'html-import', now: NOW, rules: RULES },
+        { now: NOW, rules: RULES },
       );
       expect(result.bookmarks[0]!.status, order.join(' then ')).toBe('active');
     }
@@ -132,7 +132,7 @@ describe('ingest — status routing', () => {
     const shared = url();
     const result = ingest(
       [entry(shared, [SESSION, '2024-03-28']), entry(shared, [SESSION, '2024-04-02'])],
-      { kind: 'html-import', now: NOW, rules: RULES },
+      { now: NOW, rules: RULES },
     );
     expect(result.bookmarks[0]!.status).toBe('inbox');
   });
@@ -141,7 +141,7 @@ describe('ingest — status routing', () => {
     // Overloading one field would lose both facts.
     const result = ingest(
       [entry(url(), [SESSION, '2024-03-28'])],
-      { kind: 'html-import', now: NOW, rules: RULES },
+      { now: NOW, rules: RULES },
     );
     const { source } = result.bookmarks[0]!;
     expect(source.importedAt).toBe(NOW);
@@ -153,7 +153,7 @@ describe('ingest — status routing', () => {
 describe('ingest — record construction', () => {
   it('preserves the raw folder path even where it produced no tags', () => {
     const path = [SESSION, '2024-03-28'];
-    const result = ingest([entry(url(), path)], { kind: 'html-import', now: NOW, rules: RULES });
+    const result = ingest([entry(url(), path)], { now: NOW, rules: RULES });
     expect(result.bookmarks[0]!.tags).toEqual([]);
     expect(result.bookmarks[0]!.source.originalFolderPath).toBe(path.join('/'));
   });
@@ -161,7 +161,7 @@ describe('ingest — record construction', () => {
   it('prefers a supplied creation date and falls back to the import time', () => {
     const result = ingest(
       [{ url: url(), title: 'T', folderPath: [], dateAdded: 123 }, entry(url())],
-      { kind: 'html-import', now: NOW },
+      { now: NOW },
     );
     expect(result.bookmarks.map((b) => b.createdAt).sort((a, b) => a - b)).toEqual([123, NOW]);
   });
@@ -170,18 +170,13 @@ describe('ingest — record construction', () => {
     const u = url();
     const result = ingest(
       [{ url: u, title: '   ', folderPath: [] }],
-      { kind: 'html-import', now: NOW },
+      { now: NOW },
     );
     expect(result.bookmarks[0]!.title).toBe(u);
   });
 
-  it('stamps the source kind it was given', () => {
-    const result = ingest([entry(url())], { kind: 'chrome-import', now: NOW });
-    expect(result.bookmarks[0]!.source.kind).toBe('chrome-import');
-  });
-
   it('handles an empty import without throwing', () => {
-    const result = ingest([], { kind: 'html-import', now: NOW });
+    const result = ingest([], { now: NOW });
     expect(result.bookmarks).toEqual([]);
     expect(result.summary.added).toBe(0);
   });

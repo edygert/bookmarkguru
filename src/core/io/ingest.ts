@@ -2,9 +2,7 @@ import { newId } from '../ids';
 import { domainOf, isIngestable, normalizeForDedupe } from '../normalize-url';
 import { TagCollector } from '../tags';
 import { isSessionPath, sessionDateOf, taggerForEntries, type FolderRules } from './folder-tags';
-import type {
-  Bookmark, BookmarkStatus, ImportSummary, RawEntry, SourceKind, Tag,
-} from '../types';
+import type { Bookmark, BookmarkStatus, ImportSummary, RawEntry, Tag } from '../types';
 
 /**
  * `RawEntry[]` → records. The half of importing that every source format shares.
@@ -17,7 +15,6 @@ import type {
 
 export interface IngestOptions {
   now?: number;
-  kind: SourceKind;
   /** Where ordinary records land. Saved tab sets override this to 'inbox' per record. */
   status?: BookmarkStatus;
   /**
@@ -34,7 +31,7 @@ export interface ImportResult {
 }
 
 export function ingest(entries: readonly RawEntry[], options: IngestOptions): ImportResult {
-  const { now = Date.now(), kind, status = 'active', rules } = options;
+  const { now = Date.now(), status = 'active', rules } = options;
 
   // Pass one lives here: the tagger needs every path before it can tell which folder
   // names are ambiguous, so it is built over the whole corpus up front.
@@ -107,7 +104,6 @@ export function ingest(entries: readonly RawEntry[], options: IngestOptions): Im
       // is what stops stale session records diluting the default view.
       status: session ? 'inbox' : status,
       source: {
-        kind,
         importedAt: now,
         ...(entry.chromeId !== undefined && { chromeId: entry.chromeId }),
         ...(entry.windowId !== undefined && { windowId: entry.windowId }),

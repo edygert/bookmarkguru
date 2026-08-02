@@ -135,7 +135,8 @@ const after = JSON.parse(await s.evaluate(`(async () => {
   });
   const [bookmarks, tags] = await Promise.all([getAll('bookmarks'), getAll('tags')]);
   const name = Object.fromEntries(tags.map(t => [t.id, t.name]));
-  const captured = bookmarks.filter(b => b.source.kind === 'tab-import');
+  // A captured tab is the only record carrying the window it was open in.
+  const captured = bookmarks.filter(b => b.source.windowId !== undefined);
   return JSON.stringify({
     total: bookmarks.length,
     captured: captured.length,

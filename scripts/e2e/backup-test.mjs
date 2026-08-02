@@ -61,7 +61,7 @@ const seeded = await s.evaluate(`(async () => {
     createdAt: 5000, updatedAt: 5001,
     lastOpenedAt: 5002, openCount: 7,
     status: 'archived',
-    source: { kind: 'manual', importedAt: 5000 },
+    source: { importedAt: 5000 },
   });
   tx.objectStore('tags').put({ id: '${GENERAL}', name: '${TOKEN}GEN', color: 'slate' });
   tx.objectStore('tags').put({
@@ -159,7 +159,7 @@ check('the record really was removed before restoring', removed === 'gone');
 
 /** Fill the file input the way a picker would, without opening an OS dialog. */
 const pick = (text, name) => s.evaluate(`(() => {
-  const input = document.querySelector('.sidebar__file');
+  const input = document.querySelector('#restore-file');
   if (!input) return 'NO FILE INPUT';
   const dt = new DataTransfer();
   dt.items.add(new File([${text}], ${JSON.stringify(name)}, { type: 'application/json' }));
@@ -208,15 +208,12 @@ const raw = () => s.evaluate(`(async () => {
     const r = db.transaction(store).objectStore(store).getAll();
     r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
   });
-  const [bookmarks, tags, meta] = await Promise.all([
-    getAll('bookmarks'), getAll('tags'), getAll('meta'),
-  ]);
+  const [bookmarks, tags] = await Promise.all([getAll('bookmarks'), getAll('tags')]);
   return JSON.stringify({
     total: bookmarks.length,
     record: bookmarks.find(b => b.id === '${ID}') ?? null,
     qualified: tags.find(t => t.id === '${QUALIFIED}') ?? null,
     tagCount: tags.length,
-    firstRunComplete: meta.find(m => m.key === 'firstRunComplete')?.value ?? null,
   });
 })()`);
 
@@ -234,7 +231,7 @@ check('the qualified tag kept its parent', restored.qualified?.parent === GENERA
 check('every record in the file came back', restored.total === inFile.total);
 
 const message = await s.evaluate(
-  `document.querySelector('.sidebar__note')?.textContent ?? null`,
+  `document.querySelector('.sidebar__group--backup .sidebar__note')?.textContent ?? null`,
 );
 check('the restore reports what it wrote', /Restored \d+ links?/.test(message ?? ''));
 
@@ -243,11 +240,6 @@ await s.evaluate('location.reload()');
 await wait(2500);
 const afterReload = JSON.parse(await raw());
 check('still there after a reload', afterReload.record?.id === ID);
-
-// `clearAll` wipes `meta` along with everything else, so a restore that did not re-set this
-// would come back showing the first-run empty state over a full library. The record count
-// cannot catch that — the marker is what the empty state actually reads.
-check('the first-run marker was re-set after the wipe', afterReload.firstRunComplete === true);
 
 // ── a file that is not a backup must change nothing ───────────────────────────
 
@@ -265,7 +257,7 @@ check('and leaves the seeded record alone', afterForeign.record?.id === ID);
 
 const rejection = JSON.parse(
   await s.evaluate(`(() => {
-    const note = document.querySelector('.sidebar__note');
+    const note = document.querySelector('.sidebar__group--backup .sidebar__note');
     return JSON.stringify({ text: note?.textContent ?? null, error: note?.dataset.error ?? null });
   })()`),
 );

@@ -32,6 +32,7 @@ node scripts/e2e/tabs-test.mjs
 node scripts/e2e/filters-test.mjs
 node scripts/e2e/tags-crud-test.mjs
 node scripts/e2e/triage-test.mjs
+node scripts/e2e/import-file-test.mjs
 node scripts/e2e/backup-test.mjs
 ```
 
@@ -42,10 +43,13 @@ before, so it deliberately runs near the end rather than in isolation. It comput
 expectation from live state, so it does not care how many tabs the earlier scripts left
 open.
 
-`triage-test` runs **last** because it is the only script that deletes records. It seeds
-its own and narrows to them with the search box, so it does not disturb anything the
-others rely on — but a script that destroys data has no business running ahead of ones
-that count it.
+`triage-test` runs after everything that counts records, because it is the only script
+that deletes them. It seeds its own and narrows to them with the search box, so it does
+not disturb anything the others rely on.
+
+`import-file-test` then adds records of its own, and `backup-test` runs **last** of all:
+it replaces the entire library, so every earlier expectation would be computed against
+data it has already thrown away.
 
 `tags-crud-test` sits just before it, for a weaker version of the same reason: it deletes
 a *tag*, not a record. It seeds its own record and its own tags, and reads raw tag **ids**

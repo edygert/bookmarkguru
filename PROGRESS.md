@@ -18,17 +18,12 @@ Remaining work, highest value first. Nothing here is started.
 
 | # | Item | Notes |
 |---|---|---|
-| 1 | UI for `importFromHtmlFile` | Implemented, exported, tested, reachable from no UI. The only `<input type=file>` in the tree is the JSON restore picker. |
-| 2 | Chrome re-import after first run | The only affordance is the empty state's button, gated on `bookmarks.length === 0`. Once one record exists there is no way to import again. |
-| 3 | Import progress | `runImport` chunks 500 at a time behind one static `Importing…` label. A 5,000-record import shows nothing moving. |
-| 4 | Distinguish import failure from "imported nothing" | The `catch` sets a banner and returns `EMPTY_SUMMARY`, all zeros. Callers cannot tell the two apart. |
-| 5 | Onboarding / first run | `META.firstRunComplete` is written in `runImport` and `restoreBackup` and **read nowhere**. Emptying the library re-pitches the first-run import. |
-| 6 | Duplicate detection and merge review | |
-| 7 | Command bar | |
-| 8 | Window the expanded domain list | `+N more` renders every domain into an unwindowed pane. First thing to break on a real import. |
-| 9 | `eslint-plugin-solid` | Gotcha #5 is enforced by discipline only. |
-| 10 | Clear the import summary | Once set, `summary()` persists indefinitely and permanently replaces the keyboard-hint line. |
-| 11 | Component tests | Zero tests under `src/ui/`; every UI claim rests on the e2e scripts. |
+| 1 | Duplicate detection and merge review | |
+| 2 | Command bar | |
+| 3 | Window the expanded domain list | `+N more` renders every domain into an unwindowed pane. 315 tags and hundreds of domains come out of a real import. |
+| 4 | `eslint-plugin-solid` | Gotcha #5 is enforced by discipline only. |
+| 5 | Clear the import outcome | Once set, `outcome()` persists indefinitely and permanently replaces the keyboard-hint line in the status bar. |
+| 6 | Component tests | Zero tests under `src/ui/`; every UI claim rests on the e2e scripts. |
 
 ---
 
@@ -136,8 +131,8 @@ memory.
 
 ```bash
 npm install
-npm run check          # isolation → permissions → tsc → 171 tests → build → CSP
-npm run e2e            # build, launch headless browser, run 139 browser assertions
+npm run check          # isolation → permissions → tsc → 167 tests → build → CSP
+npm run e2e            # build, launch headless browser, run 165 browser assertions
 npm run build          # → dist/, load unpacked at chrome://extensions
 npm run dev            # Vite + HMR
 npm run tags:preview -- <export.html>   # what an import would produce. Writes nothing.
@@ -266,6 +261,7 @@ the sidebar, in separate groups, and the group heading is what distinguishes the
 | domain list | filter | multi-select; `+N more` selects nothing, so it is not a `nav-item` |
 | Open now | filter, in the toolbar | |
 | Clear filters | action, in the toolbar | drops tags, domains, open-now; leaves the view |
+| Import from Chrome · Import a file | action, own group | see "Importing" |
 | Export · Restore | action, own group | not `nav-item`: anything wearing that class in this pane reads as selectable |
 
 **`Open now` belongs in the toolbar, not the sidebar.** Among the status views it read as
@@ -463,6 +459,30 @@ named `Rust` are the same tag by construction.
 
 ---
 
+## Importing
+
+One import, two sources: Chrome's live tree and exported bookmark files. Both parsers
+produce `RawEntry[]` and feed the same `ingest`. The sidebar's `Import` group drives both and
+is available at any time, not only on an empty library.
+
+- **The file picker takes several files at once.** Each runs as its own `runImport`, in order,
+  and each ends with `load()` — so a later file dedupes against what an earlier one just
+  wrote. The first file to supply a URL keeps its title and tags.
+- **Re-import is additive.** Records already in the library are left exactly as they are and
+  only unseen `normalizedUrl`s are written. One click, no confirmation.
+- **Progress is `library.importProgress()`:** a label plus `done`/`total`, `null` when idle.
+  The bar renders only while records are being written; reading and parsing show the label
+  alone. `runImport` yields to the event loop once before calling `ingest`, which is
+  synchronous — without that the label never paints.
+- **`ImportOutcome` is a summary or an error string**, never both and never an all-zero
+  summary standing in for a failure. `added + alreadySaved + skipped` is the number of entries
+  parsed, which distinguishes "no bookmarks in that file" from "nothing new" from a crash.
+- **Import errors report beside the picker**, like restore errors, not in the banner over the
+  list. `state.error` is for `load()` failures.
+
+Measured on a real 4.8 MB export: 6,974 entries → 5,713 records, 315 tags (32 qualified), 331
+routed to the inbox, 14 skipped, under a second.
+
 ## Folder→tag rules
 
 Derived by running candidate rules over a large real export and encoding what survived.
@@ -598,10 +618,9 @@ browsing.
 hands it to `ingest`. `RawEntry` has no field for an id, a note, a status, an open count or
 `Tag.parent`, and `ingest` hardcodes each to a default and mints a fresh id, so a backup
 routed through it would return as a fresh import wearing the same URLs. Restore writes
-`Bookmark` records straight through. `SourceKind` has **no** `json-restore` member: a
-restored record is still the chrome-import it always was. It also bypasses `runImport`,
-whose dedupe keeps anything already in the library — under that policy a restore would
-write nothing.
+`Bookmark` records straight through, `source` included. It also bypasses `runImport`, whose
+dedupe keeps anything already in the library — under that policy a restore would write
+nothing.
 
 **Restore replaces.** `clearAll` then write. A merge cannot bring back a note you deleted or
 a status you changed.
@@ -619,10 +638,7 @@ again starts by wiping. A single-transaction `replaceAll` would buy a guarantee 
 already provides, at the cost of one unbounded transaction.
 
 **The file excludes the `meta` store.** `searchIndex` is derived from the records and is the
-largest value in the database. `firstRunComplete` is an inference — a library holding
-records is past first run — so restore sets it rather than carrying it. `clearAll` wipes
-`meta`, so without that re-set a restore would show the first-run empty state over several
-thousand records.
+largest value in the database; settings are not records.
 
 **Validation checks identity, not every field:** a `format` marker, the schema version, and
 both arrays present. The realistic mistake is picking the wrong file, and every rule beyond
