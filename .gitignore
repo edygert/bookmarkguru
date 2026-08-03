@@ -9,6 +9,8 @@ dist/
 # synthetic and live in scripts/fixtures/.
 bookmarks*.html
 *.bookmarks.html
+# Backups written by the sidebar export, named bookmarkguru-<date>.json.
+bookmarkguru-*.json
 
 # Folder names from a real bookmark tree are personal data too — clients, employers,
 # course codes, hobbies. The import rules that reference them stay local; only the
