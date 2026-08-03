@@ -127,7 +127,7 @@ export function DetailPane(props: { bookmark: Bookmark | undefined }) {
               <div class="detail__chips">
                 <For each={tags()}>
                   {(tag) => (
-                    <span class="chip" style={{ '--tag-color': `var(--tag-${tag.color})` }}>
+                    <span class="chip">
                       {/* A qualified tag names the folder it was kept separate under,
                           so two same-named tags read differently from each other. */}
                       <Show when={parentOf(tag)}>
@@ -169,10 +169,6 @@ export function DetailPane(props: { bookmark: Bookmark | undefined }) {
                         class="suggestion"
                         onClick={() => void attach(bookmark().id, row.tag.id)}
                       >
-                        <span
-                          class="tag-dot"
-                          style={{ '--tag-color': `var(--tag-${row.tag.color})` }}
-                        />
                         <span class="suggestion__label">
                           <Show when={row.parent}>
                             {(parent) => <span class="chip__parent">{parent().name}</span>}

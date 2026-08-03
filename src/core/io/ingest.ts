@@ -59,7 +59,7 @@ export function ingest(entries: readonly RawEntry[], options: IngestOptions): Im
       ...new Set([
         ...tagger.tagsFor(entry.folderPath),
         ...(entry.sourceTags ?? [])
-          .map((tag) => stated.add(tag.name, tag.color))
+          .map((tag) => stated.add(tag.name))
           .filter((id) => id !== ''),
       ]),
     ];

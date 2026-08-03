@@ -65,21 +65,14 @@ export function TabDetail(props: { tab: OpenTab | undefined }) {
                   fallback={
                     <For each={tab().tags} fallback={<span class="field__hint">None.</span>}>
                       {(tag) => (
-                        <span
-                          class="chip"
-                          style={{ '--tag-color': `var(--tag-${tag.color ?? 'slate'})` }}
-                        >
-                          {tag.name}
-                        </span>
+                        <span class="chip">{tag.name}</span>
                       )}
                     </For>
                   }
                 >
                   <For each={recordTags()} fallback={<span class="field__hint">None.</span>}>
                     {(tag) => (
-                      <span class="chip" style={{ '--tag-color': `var(--tag-${tag.color})` }}>
-                        {tag.name}
-                      </span>
+                      <span class="chip">{tag.name}</span>
                     )}
                   </For>
                 </Show>

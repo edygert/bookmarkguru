@@ -11,7 +11,7 @@ import type { FolderRules } from '~/core/io/folder-tags';
 // clone still builds. See config/folder-rules.example.json.
 import folderRules from '../../../config/folder-rules.json';
 import { openTabUrlSet } from '~/core/tabs/match';
-import { colorForTag, findNameConflict, retag } from '~/core/tags';
+import { findNameConflict, retag } from '~/core/tags';
 import { tagIdFromName } from '~/core/ids';
 import {
   sourceTagsFor, tabsToBookmarks, windowOrdinals, type TabGroupLike,
@@ -193,11 +193,6 @@ const visibleTags = createMemo<TagRow[]>(() => {
   return matched.sort(
     (a, b) => b.usage.total - a.usage.total || a.tag.name.localeCompare(b.tag.name),
   );
-});
-
-const selectedTag = createMemo(() => {
-  const id = selectedTagId();
-  return id ? state.tags.find((t) => t.id === id) : undefined;
 });
 
 // ── open tabs ─────────────────────────────────────────────────────────────────
@@ -628,15 +623,6 @@ async function renameTag(id: string, name: string): Promise<{ ok: boolean; confl
   return { ok: true };
 }
 
-async function setTagColor(id: string, color: string): Promise<void> {
-  const current = state.tags.find((t) => t.id === id);
-  if (!current || current.color === color) return;
-
-  setState('tags', (t) => t.id === id, 'color', color);
-  await repository.putTag({ ...unwrap(current), color });
-  broadcast({ kind: 'tags-changed' });
-}
-
 /**
  * Create a tag, or hand back the existing one that name already resolves to.
  *
@@ -644,7 +630,7 @@ async function setTagColor(id: string, color: string): Promise<void> {
  * by construction. Returning the existing record rather than writing over it keeps a
  * rename intact: typing the *old* name attaches the tag you renamed, it does not reset it.
  */
-async function createTag(name: string, color?: string): Promise<Tag | undefined> {
+async function createTag(name: string): Promise<Tag | undefined> {
   const clean = name.trim();
   if (!clean) return undefined;
 
@@ -652,7 +638,7 @@ async function createTag(name: string, color?: string): Promise<Tag | undefined>
   const existing = state.tags.find((t) => t.id === id);
   if (existing) return unwrap(existing);
 
-  const tag: Tag = { id, name: clean, color: color ?? colorForTag(clean) };
+  const tag: Tag = { id, name: clean };
   setState('tags', (list) => [...list, tag]);
   await repository.putTag(tag);
   broadcast({ kind: 'tags-changed' });
@@ -820,7 +806,7 @@ export const library = {
   visible, selected, statusCounts, tagsById, tagNames, openUrls, isOpen,
   query, filters, sort, selectedId, view,
   openTabs, visibleTabs, unsavedTabCount, selectedTabId, selectedTab,
-  tagUsage, visibleTags, selectedTag, selectedTagId,
+  tagUsage, visibleTags, selectedTagId,
   // writes
   setQuery, setFilters, setSort, setSelectedId, setSelectedTagId,
   showStatus, showTabs, showTags, showRecordsForTag, clearTagScope, selectTab,
@@ -828,6 +814,6 @@ export const library = {
   exportBackup, restoreBackup,
   saveTabs, saveAllOpenTabs, focusTab,
   activate, updateBookmark, removeBookmark,
-  renameTag, setTagColor, createTag, deleteTag,
+  renameTag, createTag, deleteTag,
   addTagToBookmark, removeTagFromBookmark,
 };

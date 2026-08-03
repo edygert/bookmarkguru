@@ -13,8 +13,8 @@
  *
  * 2. Amber is reserved *exclusively* for "this link is open in a tab right now".
  *    Knowing that is the one thing Chrome's own manager cannot do, so it gets the
- *    only saturated colour in the interface and nothing else is allowed to use it.
- *    Indigo handles selection and focus; everything else is slate.
+ *    only saturated colour in the interface and nothing else uses it. Indigo handles
+ *    selection and focus; everything else is slate. Tags carry no colour at all.
  */
 
 :root {
@@ -54,8 +54,11 @@
    * Two lines: a bookmark or tab row, title above domain. Stacking spends height, which
    * a scrolling list has, so that no field needs a fixed-width column, which is what left
    * titles with nothing.
+   *
+   * Sized close to the two lines it holds — about 40px of the 50 that fits them at
+   * `--scale: 1`, which halves the empty space above and below.
    */
-  --row-h-2: calc(50px * var(--scale));
+  --row-h-2: calc(40px * var(--scale));
   --control-h: calc(28px * var(--scale));
   --pane-pad: calc(12px * var(--scale));
   --gap-xs: calc(4px * var(--scale));
@@ -155,39 +158,4 @@
   --signal-soft: #251f10;
   --signal-edge: #8a6d1f;
   --danger: #f87171;
-}
-
-/*
- * Tag colours.
- *
- * Stored on a Tag as a token *name* ('blue', 'amber', …) rather than a hex value, so
- * the stylesheet owns the actual colour and can render it correctly in both themes.
- * Note amber here is a muted tag colour and intentionally distinct from --signal.
- */
-:root {
-  --tag-slate: #64748b;
-  --tag-red: #dc2626;
-  --tag-orange: #ea580c;
-  --tag-amber: #ca8a04;
-  --tag-green: #16a34a;
-  --tag-teal: #0d9488;
-  --tag-blue: #2563eb;
-  --tag-purple: #7c3aed;
-  --tag-pink: #db2777;
-  --tag-cyan: #0891b2;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --tag-slate: #94a3b8;
-    --tag-red: #f87171;
-    --tag-orange: #fb923c;
-    --tag-amber: #fbbf24;
-    --tag-green: #4ade80;
-    --tag-teal: #2dd4bf;
-    --tag-blue: #60a5fa;
-    --tag-purple: #a78bfa;
-    --tag-pink: #f472b6;
-    --tag-cyan: #22d3ee;
-  }
 }

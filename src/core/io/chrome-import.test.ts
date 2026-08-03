@@ -101,13 +101,4 @@ describe('chromeTreeToBookmarks — composition', () => {
     expect(result.bookmarks[0]!.source.originalFolderPath).toBe('P1/P2');
   });
 
-  it('produces stable tag colours across runs', () => {
-    // Re-importing must not reshuffle the palette.
-    const build = () => chromeTreeToBookmarks(tree([
-      { id: '1', title: 'ROOT', children: [{ id: '10', title: 'P1', children: [
-        { id: '11', title: 'T', url: 'https://stable.example.com/' },
-      ]}]},
-    ]), { now: NOW });
-    expect(build().tags[0]!.color).toBe(build().tags[0]!.color);
-  });
 });

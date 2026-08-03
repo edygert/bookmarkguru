@@ -88,7 +88,7 @@ src/
   core/                     ← NO Solid, NO DOM, NO chrome.*
     types.ts                Bookmark, BookmarkStatus, Tag, Filters, BackupPayload
     normalize-url.ts        the two normalizations + isIngestable + domainOf
-    tags.ts                 TagCollector, colour mapping, generalTagId, retag
+    tags.ts                 TagCollector, generalTagId, findNameConflict, retag
     db/                     schema.ts · repository.ts (interface) · idb-repository.ts
     search/query.ts         text → status → sort. Text is the only narrowing there is
     tabs/match.ts           extensible matching strategy list
@@ -113,6 +113,8 @@ src/
 
 `Bookmark`: `id`, `url`, `normalizedUrl`, `domain`, `title`, `description`, `notes`,
 `tags` (ids), `createdAt`, `updatedAt`, `lastOpenedAt`, `openCount`, `status`, `source`.
+
+`Tag`: `id`, `name`, and `parent` on a qualified variant. Nothing else — no colour.
 
 `Filters`: `status` (default `['active']`) — the view — plus `tag`, a tag **id** the Tags
 view drills into. `domain` stays a field on the record: it is the second line of every row
@@ -259,6 +261,7 @@ library; nothing in it narrows.** Narrowing is the search box, which matches `ti
 | Open tabs | view | lists tabs, including ones that are not records |
 | Tags | view | lists tags, including ones on no records; drills into a tag's records |
 | tag scope chip | state, in the toolbar | shows what the Tags view drilled into; clicking it leaves |
+| Delete, on a tag row | action | opens a dialog naming the links it would strip |
 | Import from Chrome · Import a file | action, own group | see "Importing" |
 | Export · Restore | action, own group | not `nav-item`: anything wearing that class in this pane reads as selectable |
 
@@ -279,10 +282,10 @@ every window, marks the ones already saved, and offers to capture the rest.
 **`Tags` is a view for the same reason one level up.** No search over records reaches a tag
 that no record carries, so without this view untagging the last record would strand a tag
 in IndexedDB with nothing able to rename or delete it. It is also the only tag surface:
-renaming, recolouring and deleting all live in its pane.
+renaming and deleting happen on its rows.
 
-Its `Show N links` button drills into that tag's records by id, so the number on the button
-is the number of rows you land on.
+Double-clicking a row drills into that tag's records **by id**, so the count on the row is
+the number of rows you land on.
 
 ### Capturing tabs
 
@@ -407,8 +410,28 @@ Archive. A fixed line would promise `⌫ delete` where it does nothing.
 
 ## Tag editing
 
-Rename, recolour, delete, and per-record add/remove. The `Tags` view holds the list; the
-pane the bookmark detail normally occupies holds the editor.
+Rename and delete, on the row. Per-record add/remove is in the bookmark's detail pane.
+
+**The `Tags` view is the whole surface — there is no tag detail pane.** Each row is two
+lines: the name, with a `Delete` button at the right; then the usage, per status
+(`12 library · 3 inbox · 1 archive`, non-zero segments only, `unused` at zero). The Tags
+view renders no detail pane at all, so the list takes the full height.
+
+| Action | How |
+|---|---|
+| rename | `e` on the row under the cursor, or click the name of the selected row |
+| show its records | double-click the row, or `Enter` |
+| delete | the row's `Delete`, or `⌫` — both open the confirmation dialog |
+
+**The editor is one input, owned by the list.** `TagList` holds which row is editing, not
+the row: a windowed row unmounts when it scrolls out of range, which would close an open
+editor mid-rename. The input stops `keydown` from bubbling, or the list's own `j`/`k`
+would move the cursor out from under it and `Enter` would drill into the records instead
+of committing.
+
+**Tags have no colour.** `colorForTag` derived one from the name, which conveys nothing the
+label does not, and 315 tags over 9 colours cannot identify anything. Chips read as chips
+from their border and monospace.
 
 **Renaming writes no bookmark record.** `Bookmark.tags` holds ids, so a rename touches one
 field on one tag record. Two consequences:
@@ -422,15 +445,19 @@ field on one tag record. Two consequences:
   a qualified tag renders behind its parent's name. Two tags rendering identically is the
   unusable case.
 
-**Deleting is guarded by its own count, not a dialog.** Delete strips the tag from every
-record and removes the tag; no bookmark is deleted. Two clicks, the second labelled with
-the number of links it will touch. **Records first, tag record last** — a failure between
+**Deleting asks in a modal, and the modal names the cost.** Delete strips the tag from every
+record and removes the tag; no bookmark is deleted. A native `<dialog>` opened with
+`showModal` — focus trapping, Escape-to-close and the backdrop are the browser's — saying
+how many links it will strip, with `Cancel` focused so a stray `Enter` cancels. The dialog
+belongs to `TagList` for the same reason the editor does. **Records first, tag record
+last** — a failure between
 the two leaves records carrying a tag that still exists, which is untidy, where the reverse
 leaves ids pointing at a deleted tag, which renders as nothing and matches no filter while
 still occupying a slot on every record.
 
-Deleting a general tag does **not** cascade to its qualified children. They are promoted to
-roots in the sidebar and labelled with their qualifying folder, so an orphan is visible.
+Deleting a general tag does **not** cascade to its qualified children. An orphan keeps its
+qualifying folder in front of its name (`P1 · SHARED`), so it stays distinguishable from
+the general tag it outlived.
 
 **There is no merge; deleting stands in for it.** A qualified tag is always emitted
 alongside its general form, so a record tagged `P1 · SHARED` already carries `SHARED`.
@@ -643,17 +670,16 @@ Both documented in `tokens.css`.
 - **The domain leads the second line of each row, in monospace,** under the title. Monospace
   is the subject's vernacular: the URL bar, the terminal.
 - **Amber (`--signal`) is reserved exclusively for "open in a tab right now."** It is the
-  only saturated colour in the UI. Indigo handles selection and focus; everything else is
-  slate. The tag palette's `amber` is a separate, muted token and is excluded from the tag
-  colour picker.
+  only saturated colour in the UI. Indigo handles selection and focus, red marks the two
+  destructive controls, everything else is slate. Tags carry no colour.
 
 Adding a colour means updating three places: the light block, the dark block, and the
 explicit `:root[data-theme=…]` overrides.
 
 ### Layout
 
-Sidebar full height on the left; the list **above** the detail pane, which takes a quarter
-of the height (`3fr / 1fr`). Both scroll independently and the page itself never scrolls —
+Sidebar full height on the left; the list **above** the detail pane, which takes a third of
+the height (`2fr / 1fr`). Both scroll independently and the page itself never scrolls —
 `minmax(0, …)` on each grid row is what allows that.
 
 The detail pane was a third column until horizontal space ran out: a 1440px window left the
@@ -666,9 +692,11 @@ them.
 
 ### Rows
 
-**A row is a title and a domain, on two lines** (`--row-h-2`) — the same shape in the
-library and in the open-tabs list, so the two URL lists scan identically. Tag rows stay one
-line (`--row-h`).
+**A row is two lines** (`--row-h-2`, sized close to the two lines it holds): title over
+domain in the library and open-tabs lists, name over usage in the Tags list.
+
+**Double-click activates**, on both: a bookmark opens or switches to its tab, a tab row
+focuses that tab. `Enter` on the list does the same thing.
 
 **No field is in a fixed-width column.** A single-line row needs one per field, and the
 domain's was 148px × `--scale` — a third of a narrow pane — leaving titles rendering as

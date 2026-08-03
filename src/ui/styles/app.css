@@ -47,7 +47,7 @@ button {
 .app {
   display: grid;
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 3fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
   grid-template-areas:
     'side list'
     'side detail';
@@ -180,14 +180,6 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
-.tag-dot {
-  width: calc(7px * var(--scale));
-  height: calc(7px * var(--scale));
-  border-radius: 50%;
-  background: var(--tag-color, var(--tag-slate));
-  flex: none;
-}
-
 /* ── toolbar ────────────────────────────────────────────────────────────────── */
 
 .toolbar {
@@ -250,6 +242,42 @@ button {
 }
 
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/*
+ * `background` restated in `:hover` for the reason gotcha #8 records: `.btn:hover` is
+ * (0,2,0) and this modifier is (0,1,0), so the plain rule would repaint the button in
+ * `--hover` while its text stayed light — invisible either way round.
+ */
+.btn--danger { background: var(--danger); border-color: var(--danger); color: var(--surface); }
+.btn--danger:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--surface);
+  filter: brightness(1.08);
+}
+
+/* ── dialog ─────────────────────────────────────────────────────────────────── */
+
+/*
+ * A native `<dialog>` opened with `showModal`: focus trapping, Escape-to-close and the
+ * backdrop are the browser's, not ours. Used where an action cannot be undone.
+ */
+.dialog {
+  max-width: calc(360px * var(--scale));
+  padding: var(--gap-lg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--fg);
+}
+
+.dialog::backdrop { background: rgb(0 0 0 / 0.4); }
+
+.dialog__title { font: 600 var(--text-lg) / 1.3 var(--font-ui); margin: 0 0 var(--gap-sm); }
+
+.dialog__body { margin: 0 0 var(--gap-lg); color: var(--fg-muted); }
+
+.dialog__actions { display: flex; gap: var(--gap-sm); justify-content: flex-end; }
 
 /*
  * The tag the list is drilled into, in the toolbar beside the search box it composes with.
@@ -355,7 +383,7 @@ button {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: calc(2px * var(--scale));
+  gap: calc(1px * var(--scale));
 }
 
 .row__line {
@@ -413,8 +441,58 @@ button {
 
 /* A tag row. Like a tab row it is not itself clickable-to-open, and a tag on no records
    is dimmed rather than hidden — this list is the only surface that can reach one. */
-.row--tag { cursor: default; }
+.row--tag { cursor: default; height: var(--row-h-2); }
 .row--tag[data-unused='true'] .row__title { color: var(--fg-faint); }
+
+/* The folder that qualifies a tag, ahead of its name: `P1 · SHARED`. Dimmed, because the
+   tag is still "SHARED" — the prefix only says which one. */
+.row__prefix {
+  font: var(--text-sm) / 1 var(--font-mono);
+  color: var(--fg-faint);
+  flex: none;
+}
+
+.row__prefix::after {
+  content: '·';
+  margin-left: var(--gap-xs);
+}
+
+/* The name reads as text and only admits to being editable on hover, for the reason the
+   domain column did: a dense list where every line is styled as a control is unreadable. */
+.row__title--editable { cursor: text; }
+.row__title--editable:hover { text-decoration: underline dotted var(--fg-faint); }
+
+/* Sized and positioned like the text it replaces, so committing an edit does not make the
+   row jump. */
+.row__name-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: calc(20px * var(--scale));
+  padding: 0 var(--gap-xs);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--fg);
+  font: inherit;
+}
+
+.row__name-input[aria-invalid='true'] { border-color: var(--danger); }
+
+/* Replaces the usage line while a rename is refused, so the explanation is on the row it
+   belongs to rather than in a pane that no longer exists. */
+.row__error {
+  font-size: var(--text-xs);
+  color: var(--danger);
+}
+
+/* Destructive, so it says so before it is hovered — this one opens a dialog rather than
+   acting, but the row should still not read as though Delete were an ordinary action. */
+.row__action--danger { color: var(--danger); border-color: var(--danger); }
+.row__action--danger:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--surface);
+}
 
 .row__action {
   height: calc(20px * var(--scale));
@@ -453,16 +531,6 @@ button {
   white-space: nowrap;
 }
 
-/* `flex: none`, or a chip squeezed to its floor loses the dot before it loses text. */
-.chip::before {
-  content: '';
-  flex: none;
-  width: calc(5px * var(--scale));
-  height: calc(5px * var(--scale));
-  border-radius: 50%;
-  background: var(--tag-color, var(--tag-slate));
-}
-
 /*
  * The qualifying folder on a chip: "Tools · Web". Dimmed, because the tag is still
  * "Web" — the prefix only says which Web, and must not compete with the name itself.
@@ -489,32 +557,6 @@ button {
   line-height: 1;
 }
 .chip__remove:hover { color: var(--danger); }
-
-/* ── tag editor ─────────────────────────────────────────────────────────────── */
-
-.swatches { display: flex; gap: var(--gap-xs); flex-wrap: wrap; }
-
-.swatch {
-  width: calc(20px * var(--scale));
-  height: calc(20px * var(--scale));
-  padding: 0;
-  border: 2px solid transparent;
-  border-radius: 50%;
-  background: var(--tag-color, var(--tag-slate));
-  box-shadow: 0 0 0 1px var(--border);
-  cursor: pointer;
-}
-
-.swatch:hover { box-shadow: 0 0 0 1px var(--fg-faint); }
-
-/* The ring sits outside a surface-coloured border so it reads as a selection on any
-   swatch colour, including the ones close to the accent. */
-.swatch[aria-pressed='true'] {
-  border-color: var(--surface);
-  box-shadow: 0 0 0 2px var(--accent);
-}
-
-.tag-editor__name { width: 100%; }
 
 /* Where chips live: one wrapping row of them, in a pane wide enough to hold them. */
 .detail__chips {

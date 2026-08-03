@@ -126,25 +126,52 @@ const createTag = async (name) => {
   })()`);
 };
 
-/** Commit a rename the way blurring the field does. */
+/** A key on the list container, where `e` and `Delete` are bound. */
+const pressKey = (key) => s.evaluate(`(() => {
+  const list = document.querySelector('.list');
+  list.focus();
+  list.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, bubbles: true }));
+  return true;
+})()`);
+
+/** Type into the row's name field and commit with Enter, the way a person would. */
 const rename = (value) => s.evaluate(`(() => {
-  const input = document.querySelector('.tag-editor__name');
+  const input = document.querySelector('.row__name-input');
   if (!input) return 'NO NAME FIELD';
   input.value = ${JSON.stringify(value)};
-  input.dispatchEvent(new Event('change', { bubbles: true }));
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   return true;
+})()`);
+
+/** What the delete dialog is showing, or null when it is closed. */
+const dialogState = async () => JSON.parse(await s.evaluate(`(() => {
+  const d = document.querySelector('.dialog');
+  if (!d || !d.open) return 'null';
+  return JSON.stringify({
+    body: d.querySelector('.dialog__body')?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
+    buttons: [...d.querySelectorAll('button')].map(b => b.textContent.trim()),
+  });
+})()`));
+
+const clickDialog = (label) => s.evaluate(`(() => {
+  const b = [...document.querySelectorAll('.dialog button')]
+    .find(x => x.textContent.trim() === ${JSON.stringify(label)});
+  if (!b) return 'NOT FOUND';
+  b.click(); return true;
 })()`);
 
 /** What the tag view and its editor are showing. */
 const shown = async () => JSON.parse(await s.evaluate(`JSON.stringify({
   rows: [...document.querySelectorAll('.row--tag')].map(r => ({
-    title: r.querySelector('.row__title')?.textContent ?? '',
+    title: r.querySelector('.row__title')?.textContent ?? r.querySelector('.row__name-input')?.value ?? '',
     meta: r.querySelector('.row__meta')?.textContent ?? '',
     unused: r.getAttribute('data-unused'),
+    hasDelete: !!r.querySelector('.row__action'),
   })),
-  editorName: document.querySelector('.tag-editor__name')?.value ?? null,
-  error: document.querySelector('.field__error')?.textContent ?? null,
-  deleteLabel: document.querySelector('.tag-editor__delete')?.textContent ?? null,
+  editing: document.querySelector('.row__name-input')?.value ?? null,
+  error: document.querySelector('.row__error')?.textContent ?? null,
+  detailPane: !!document.querySelector('.detail'),
   chips: [...document.querySelectorAll('.chip')].map(c => c.textContent),
 })`));
 
@@ -207,10 +234,19 @@ check('the zero-record tag is shown, not hidden',
   inTagView.rows.some((r) => r.title === BETA && r.unused === 'true'));
 check('and is labelled as unused', inTagView.rows.some((r) => r.meta.includes('unused')));
 
+// ── the row is the whole editor ───────────────────────────────────────────────
+check('every row carries its own Delete', inTagView.rows.every((r) => r.hasDelete));
+check('the Tags view renders no detail pane', inTagView.detailPane === false);
+
 // ── rename: refused on a collision ────────────────────────────────────────────
 const alphaRow = inTagView.rows.findIndex((r) => r.title === ALPHA);
 await clickRow(alphaRow);
 await wait(300);
+
+// `e` on the list, the same shape as the bookmark list's `a`/`r`/`Delete`.
+await pressKey('e');
+await wait(300);
+check('`e` opens the editor on the row under the cursor', (await shown()).editing === ALPHA);
 
 await rename(BETA);
 await wait(500);
@@ -218,11 +254,13 @@ await wait(500);
 const collided = await stored();
 check('a colliding rename is refused',
   collided.mine.find((t) => t.id === `tag:${ALPHA}`)?.name === ALPHA);
-check('and says which tag it collided with',
+check('and says which tag it collided with, on the row',
   ((await shown()).error ?? '').includes(BETA));
 
 // ── rename: succeeds, and writes no bookmark record ───────────────────────────
 const beforeRename = await stored();
+await pressKey('e');
+await wait(300);
 await rename(GAMMA);
 await wait(600);
 
@@ -232,30 +270,21 @@ check('the tag name changed',
 check('the record was not rewritten — it still holds the original id',
   renamed.seedTagIds?.join('|') === beforeRename.seedTagIds?.join('|'));
 check('no link was added or lost', renamed.count === beforeRename.count);
+check('the editor closed on commit', (await shown()).editing === null);
 
-// ── recolour ──────────────────────────────────────────────────────────────────
-await clickSelector('.swatch[data-color="teal"]');
-await wait(500);
-check('the colour changed',
-  (await stored()).mine.find((t) => t.id === `tag:${ALPHA}`)?.color === 'teal');
-// `returnByValue` hands back a real number here, not a string.
-check('amber is not offered — it is reserved for open-in-a-tab',
-  Number(await s.evaluate('document.querySelectorAll(\'.swatch[data-color="amber"]\').length')) === 0);
-check('the other nine colours are',
-  Number(await s.evaluate('document.querySelectorAll(".swatch").length')) === 9);
+// ── the drill-down delivers the count the row shows ───────────────────────────
+// A search for the tag's name would also match titles and URLs, so this is the one
+// narrowing that cannot be typed — and the row's count and the list it lands on have to
+// be the same number (gotcha #12).
+const gammaRowIndex = (await shown()).rows.findIndex((r) => r.title === GAMMA);
+const promisedByRow = Number(
+  /(\d+) library/.exec((await shown()).rows[gammaRowIndex]?.meta ?? '')?.[1] ?? 'NaN');
 
-// ── the drill-down delivers the number on the button ──────────────────────────
-// The claim: `Show N links` lands on exactly N rows. A search for the tag's name would
-// also match titles and URLs, so this is the one narrowing that cannot be typed — and the
-// count and the list have to be the same number (gotcha #12).
-const promisedByButton = Number(
-  /Show (\d+) link/.exec(await s.evaluate(`(() => {
-    const b = [...document.querySelectorAll('.detail .btn')].find(x => /^Show \\d+ link/.test(x.textContent.trim()));
-    return b ? b.textContent.trim() : '';
-  })()`))?.[1] ?? 'NaN');
-
-await s.evaluate(`[...document.querySelectorAll('.detail .btn')]
-  .find(x => /^Show \\d+ link/.test(x.textContent.trim()))?.click()`);
+await s.evaluate(`(() => {
+  const row = document.querySelectorAll('.row--tag')[${gammaRowIndex}];
+  row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  return true;
+})()`);
 await wait(800);
 
 const scoped = JSON.parse(await s.evaluate(`JSON.stringify({
@@ -264,18 +293,15 @@ const scoped = JSON.parse(await s.evaluate(`JSON.stringify({
   query: document.querySelector('.search')?.value ?? '',
 })`));
 
-check('the drill-down shows the number the button promised',
-  promisedByButton > 0 && scoped.rows === promisedByButton);
+check('a double click drills into the tag\'s records',
+  promisedByRow > 0 && scoped.rows === promisedByRow);
 check('the toolbar names the tag the list is scoped to', scoped.scope.includes(GAMMA));
 check('and it did not smuggle the name into the search box', scoped.query === '');
 
-// Leaving the scope has to be possible from the scope itself.
 await clickSelector('.scope');
 await wait(600);
 check('clicking the scope clears it',
   (await s.evaluate(`!!document.querySelector('.scope')`)) === false);
-check('and the list widens again',
-  Number(await s.evaluate(`document.querySelectorAll('.row--bookmark').length`)) > scoped.rows);
 
 // Back to the tag, for the delete assertions below.
 await view('Tags');
@@ -284,20 +310,39 @@ await wait(500);
 await clickRow((await shown()).rows.findIndex((r) => r.title === GAMMA));
 await wait(400);
 
-// ── delete: two clicks, and no link goes with it ──────────────────────────────
+// ── delete: the dialog decides, and no link goes with it ──────────────────────
 const beforeDelete = await stored();
-await clickSelector('.tag-editor__delete');
-await wait(300);
+await s.evaluate(`(() => {
+  const row = [...document.querySelectorAll('.row--tag')]
+    .find(r => (r.querySelector('.row__title')?.textContent ?? '') === ${JSON.stringify(GAMMA)});
+  row?.querySelector('.row__action')?.click();
+  return true;
+})()`);
+await wait(500);
 
-const primed = await shown();
-check('the first click primes and states the cost',
-  (primed.deleteLabel ?? '').includes('Click again'));
-check('the count on the button is the records it would touch',
-  (primed.deleteLabel ?? '').includes('1 link'));
-check('nothing is deleted yet', (await stored()).mine.length === beforeDelete.mine.length);
+const asking = await dialogState();
+check('the row\'s Delete opens a dialog', asking !== null);
+check('the dialog names the count it would strip',
+  (asking?.body ?? '').includes('1 link'));
+check('and offers Cancel before Delete',
+  (asking?.buttons ?? []).join('|') === 'Cancel|Delete tag');
+check('nothing is written while it is open',
+  (await stored()).mine.length === beforeDelete.mine.length);
 
-await clickSelector('.tag-editor__delete');
-await wait(800);
+// Cancel really cancels.
+await clickDialog('Cancel');
+await wait(400);
+check('Cancel closes the dialog', (await dialogState()) === null);
+check('and the tag is still there',
+  (await stored()).mine.find((t) => t.id === `tag:${ALPHA}`)?.name === GAMMA);
+
+// And the keyboard reaches the same dialog.
+await pressKey('Delete');
+await wait(500);
+check('`Delete` on the list opens the same dialog', (await dialogState()) !== null);
+
+await clickDialog('Delete tag');
+await wait(900);
 
 const deleted = await stored();
 check('the tag is gone from IndexedDB',

@@ -3,7 +3,6 @@ import { Show, createSignal, onMount } from 'solid-js';
 import { repository } from '~/core/db/idb-repository';
 import { domainOf, isIngestable, normalizeForDedupe } from '~/core/normalize-url';
 import { newId, tagIdFromName } from '~/core/ids';
-import { colorForTag } from '~/core/tags';
 import { broadcast, send } from '~/shared/messages';
 import { Favicon } from './components/Favicon';
 import type { Bookmark, Tag } from '~/core/types';
@@ -72,7 +71,7 @@ function Popup() {
       const known = new Set((await repository.getTags()).map((t) => t.id));
       const fresh: Tag[] = names
         .filter((name) => !known.has(tagIdFromName(name)))
-        .map((name) => ({ id: tagIdFromName(name), name, color: colorForTag(name) }));
+        .map((name) => ({ id: tagIdFromName(name), name }));
       if (fresh.length) await repository.putTags(fresh);
     }
 

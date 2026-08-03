@@ -1,5 +1,4 @@
 import { ingest, type ImportResult } from './ingest';
-import { mapChromeGroupColor } from '../tags';
 import type { TabLike } from '../tabs/match';
 import type { BookmarkStatus, RawEntry, SourceTag } from '../types';
 
@@ -22,7 +21,6 @@ export type { ImportResult };
 export interface TabGroupLike {
   id: number;
   title?: string | undefined;
-  color?: string | undefined;
 }
 
 export interface TabImportOptions {
@@ -79,7 +77,7 @@ export function sourceTagsFor(
   const tags: SourceTag[] = [];
   // An untitled group carries no name worth a tag.
   if (groupTitle) {
-    tags.push({ name: groupTitle, color: mapChromeGroupColor(group?.color) });
+    tags.push({ name: groupTitle });
   }
 
   const ordinal = tab.windowId === undefined ? undefined : ordinals.get(tab.windowId);

@@ -1,5 +1,5 @@
 import { qualifiedTagId, tagIdFromName } from '../ids';
-import { colorForTag, TagCollector } from '../tags';
+import { TagCollector } from '../tags';
 import type { RawEntry, Tag } from '../types';
 
 /**
@@ -268,7 +268,7 @@ export function createFolderTagger(
         const parentId = tagIdFromName(kept[i - 1]!);
         const id = qualifiedTagId(parentId, name);
         if (!qualified.has(id)) {
-          qualified.set(id, { id, name: name.trim(), color: colorForTag(name), parent: parentId });
+          qualified.set(id, { id, name: name.trim(), parent: parentId });
         }
         ids.push(id);
       });

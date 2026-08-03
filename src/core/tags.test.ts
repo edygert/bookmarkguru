@@ -11,7 +11,7 @@ import type { Bookmark, Tag } from './types';
 const NOW = 1_700_000_000_000;
 
 function tag(id: string, name: string, parent?: string): Tag {
-  return { id, name, color: 'slate', ...(parent === undefined ? {} : { parent }) };
+  return { id, name, ...(parent === undefined ? {} : { parent }) };
 }
 
 let n = 0;

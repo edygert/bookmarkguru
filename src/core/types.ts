@@ -54,8 +54,6 @@ export interface SourceMeta {
  */
 export interface SourceTag {
   name: string;
-  /** A token name from `TAG_COLORS`. Omitted means derive one from the name. */
-  color?: string;
 }
 
 /**
@@ -104,8 +102,6 @@ export interface Bookmark {
 export interface Tag {
   id: string;
   name: string;
-  /** CSS colour token or hex. Carried over from Chrome tab-group colours on import. */
-  color: string;
   /**
    * Tag id of the general form, when this tag is a parent-qualified variant.
    *

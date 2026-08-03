@@ -37,9 +37,9 @@ const RECORD: Bookmark = {
 };
 
 const TAGS: Tag[] = [
-  { id: 'tag:p1', name: 'P1', color: 'slate' },
-  { id: 'tag:shared', name: 'SHARED', color: 'indigo' },
-  { id: 'tag:p1/shared', name: 'SHARED', color: 'indigo', parent: 'tag:p1' },
+  { id: 'tag:p1', name: 'P1' },
+  { id: 'tag:shared', name: 'SHARED' },
+  { id: 'tag:p1/shared', name: 'SHARED', parent: 'tag:p1' },
 ];
 
 const roundTrip = (bookmarks: readonly Bookmark[], tags: readonly Tag[]) => {

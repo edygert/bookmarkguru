@@ -20,8 +20,8 @@ function tab(over: Partial<TabLike> = {}): TabLike {
   return { id: ++n, url: url(), title: 'T', windowId: 100, groupId: UNGROUPED, index: 0, ...over };
 }
 
-const group = (id: number, title?: string, color?: string): TabGroupLike =>
-  ({ id, ...(title !== undefined && { title }), ...(color !== undefined && { color }) });
+const group = (id: number, title?: string): TabGroupLike =>
+  ({ id, ...(title !== undefined && { title }) });
 
 describe('windowOrdinals', () => {
   it('numbers windows from 1 in id order, not in the order tabs are listed', () => {
@@ -43,11 +43,6 @@ describe('tabsToEntries — tagging', () => {
   it('tags a grouped tab with its group title', () => {
     const [entry] = tabsToEntries([tab({ groupId: 5 })], { groups: [group(5, 'G1')] });
     expect(entry!.sourceTags?.map((t) => t.name)).toContain('G1');
-  });
-
-  it('carries the Chrome group colour onto the tag', () => {
-    const [entry] = tabsToEntries([tab({ groupId: 5 })], { groups: [group(5, 'G1', 'cyan')] });
-    expect(entry!.sourceTags?.find((t) => t.name === 'G1')?.color).toBe('cyan');
   });
 
   it('treats groupId -1 as ungrouped rather than as a group id', () => {
@@ -169,10 +164,10 @@ describe('tabsToBookmarks', () => {
   });
 
   it('returns a tag record for every tag id it puts on a bookmark', () => {
-    // A dangling id would render as a missing chip and a sidebar row that never appears.
+    // A dangling id renders as nothing on screen and is counted by no view.
     const result = tabsToBookmarks(
       [tab({ windowId: 100, groupId: 5 }), tab({ windowId: 200 })],
-      { now: NOW, groups: [group(5, 'G1', 'blue')] },
+      { now: NOW, groups: [group(5, 'G1')] },
     );
     const known = new Set(result.tags.map((t) => t.id));
     for (const bookmark of result.bookmarks) {

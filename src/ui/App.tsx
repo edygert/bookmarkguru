@@ -4,7 +4,6 @@ import { BookmarkList } from './components/BookmarkList';
 import { TabList } from './components/TabList';
 import { TagList } from './components/TagList';
 import { DetailPane } from './components/DetailPane';
-import { TagDetail } from './components/TagDetail';
 import { TabDetail } from './components/TabDetail';
 import { EmptyState } from './components/EmptyState';
 import { library, type ImportOutcome } from './state/library';
@@ -155,7 +154,9 @@ export function App(props: { compact?: boolean }) {
     <div
       class="app"
       data-layout={props.compact ? 'compact' : 'full'}
-      data-detail={props.compact ? 'hidden' : 'shown'}
+      /* The Tags view has no detail pane — a tag's name, usage and controls are all on
+         its row — so the list takes the full height there. */
+      data-detail={props.compact || onTags() ? 'hidden' : 'shown'}
     >
       <Show when={!props.compact}>
         <Sidebar />
@@ -222,7 +223,6 @@ export function App(props: { compact?: boolean }) {
                     title={`Showing only links tagged ${tag().name} — click to clear`}
                     onClick={() => library.clearTagScope()}
                   >
-                    <span class="tag-dot" style={{ '--tag-color': `var(--tag-${tag().color})` }} />
                     {tag().name}
                     <span class="scope__clear" aria-hidden="true">×</span>
                   </button>
@@ -345,18 +345,23 @@ export function App(props: { compact?: boolean }) {
                   {(hint) => <> <kbd>{hint.key}</kbd> {hint.label}</>}
                 </For>
               </Show>
+              {/* The tag list's own keys. Same rule as the triage hints: they are
+                  advertised in the view where they do something. */}
+              <Show when={onTags()}>
+                <> <kbd>e</kbd> rename <kbd>⌫</kbd> delete</>
+              </Show>
             </span>
           </Show>
         </div>
       </main>
 
-      {/* One detail pane per view, in the same slot: a bookmark, a tag, or a tab. Rows
-          stay title-and-domain everywhere because the attributes live here. */}
-      <Show when={!props.compact}>
+      {/*
+        One detail pane per view, in the same slot — except the Tags view, which has none:
+        a tag's name, usage and controls are all on its row. Nothing may render in the slot
+        there, or the grid keeps a `detail` area for it and the list stops at two thirds.
+      */}
+      <Show when={!props.compact && !onTags()}>
         <Switch fallback={<DetailPane bookmark={library.selected()} />}>
-          <Match when={onTags()}>
-            <TagDetail tag={library.selectedTag()} />
-          </Match>
           <Match when={onTabs()}>
             <TabDetail tab={library.selectedTab()} />
           </Match>
