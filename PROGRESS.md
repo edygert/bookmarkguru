@@ -134,8 +134,8 @@ memory.
 
 ```bash
 npm install
-npm run check          # isolation → permissions → tsc → 168 tests → build → CSP
-npm run e2e            # build, launch headless browser, run 163 browser assertions
+npm run check          # isolation → permissions → tsc → tests → build → CSP
+npm run e2e            # build, launch headless browser, run the browser assertions
 npm run build          # → dist/, load unpacked at chrome://extensions
 npm run dev            # Vite + HMR
 npm run tags:preview -- <export.html>   # what an import would produce. Writes nothing.
