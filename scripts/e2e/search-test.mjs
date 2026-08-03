@@ -55,7 +55,7 @@ const seeded = await s.evaluate(`(async () => {
     tx.objectStore('bookmarks').put({
       id: 'bm:${TOKEN}-' + i,
       url, normalizedUrl: url, domain: seed.domain,
-      title: seed.title, description: '', notes: '', tags: seed.tags,
+      title: seed.title, description: '', tags: seed.tags,
       // Descending, so the rendered order under the default createdAt-desc sort is
       // exactly the order of the array above.
       createdAt: 5000 - i, updatedAt: 5000 - i,

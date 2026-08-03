@@ -94,7 +94,6 @@ export function ingest(entries: readonly RawEntry[], options: IngestOptions): Im
       domain: domainOf(entry.url),
       title: entry.title.trim() || entry.url,
       description: '',
-      notes: '',
       tags,
       createdAt: entry.dateAdded ?? now,
       updatedAt: now,

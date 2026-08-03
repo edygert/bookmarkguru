@@ -112,15 +112,19 @@ export function DetailPane(props: { bookmark: Bookmark | undefined }) {
               <h1 class="detail__title">{bookmark().title}</h1>
             </div>
 
-            <div class="detail__url">{bookmark().url}</div>
-
-            <button
-              type="button"
-              class="btn btn--primary"
-              onClick={() => void library.activate(bookmark())}
-            >
-              {library.isOpen(bookmark()) ? 'Switch to tab' : 'Open'}
-            </button>
+            {/* The action leads the URL rather than sitting under it: they are one
+                statement — this address, and the thing to do with it — and stacking them
+                spent a row of a pane whose scarce axis is height. */}
+            <div class="detail__address">
+              <button
+                type="button"
+                class="btn btn--primary"
+                onClick={() => void library.activate(bookmark())}
+              >
+                {library.isOpen(bookmark()) ? 'Switch to tab' : 'Open'}
+              </button>
+              <span class="detail__url">{bookmark().url}</span>
+            </div>
 
             <div class="detail__section">
               <div class="detail__label">Tags</div>
@@ -197,18 +201,6 @@ export function DetailPane(props: { bookmark: Bookmark | undefined }) {
               <Show when={alreadyOn()}>
                 <p class="field__hint">Already on this link.</p>
               </Show>
-            </div>
-
-            <div class="detail__section">
-              <div class="detail__label">Notes</div>
-              <textarea
-                class="notes"
-                placeholder="Why is this worth keeping?"
-                value={bookmark().notes}
-                onChange={(e) =>
-                  void library.updateBookmark(bookmark().id, { notes: e.currentTarget.value })
-                }
-              />
             </div>
 
             <div class="detail__section">

@@ -91,7 +91,6 @@ function Popup() {
         domain: domainOf(url()),
         title: title().trim() || url(),
         description: '',
-        notes: '',
         tags: tagIds,
         createdAt: now,
         updatedAt: now,

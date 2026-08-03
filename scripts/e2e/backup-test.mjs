@@ -47,7 +47,7 @@ const DB = `await new Promise((res, rej) => {
 
 // ── seed one record with every field set to a non-default value ────────────────
 
-console.log('seeding a record with a note, an archived status and two tags…');
+console.log('seeding a record with a description, an archived status and two tags…');
 const seeded = await s.evaluate(`(async () => {
   const db = ${DB};
   const tx = db.transaction(['bookmarks', 'tags'], 'readwrite');
@@ -55,8 +55,7 @@ const seeded = await s.evaluate(`(async () => {
   tx.objectStore('bookmarks').put({
     id: '${ID}',
     url, normalizedUrl: url, domain: 'backup.example',
-    title: '${TOKEN} record', description: 'desc',
-    notes: 'a note that only a backup can carry',
+    title: '${TOKEN} record', description: 'a description only a backup can carry',
     tags: ['${GENERAL}', '${QUALIFIED}'],
     createdAt: 5000, updatedAt: 5001,
     lastOpenedAt: 5002, openCount: 7,
@@ -130,7 +129,8 @@ check(
   JSON.stringify(inFile.keys) ===
     JSON.stringify(['bookmarks', 'exportedAt', 'format', 'schemaVersion', 'tags']),
 );
-check('the note is in the file', inFile.record?.notes === 'a note that only a backup can carry');
+check('the description is in the file',
+  inFile.record?.description === 'a description only a backup can carry');
 check('the archived status is in the file', inFile.record?.status === 'archived');
 check('the open count is in the file', inFile.record?.openCount === 7);
 check('the qualified tag keeps its parent', inFile.qualified?.parent === GENERAL);
@@ -221,7 +221,8 @@ const restored = JSON.parse(await raw());
 
 check('the record is back in IndexedDB', restored.record !== null);
 check('its id is the original, not a fresh one', restored.record?.id === ID);
-check('the note survived', restored.record?.notes === 'a note that only a backup can carry');
+check('the description survived',
+  restored.record?.description === 'a description only a backup can carry');
 check('the status survived', restored.record?.status === 'archived');
 check('the open count survived', restored.record?.openCount === 7);
 check('lastOpenedAt survived', restored.record?.lastOpenedAt === 5002);

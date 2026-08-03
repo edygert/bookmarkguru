@@ -82,10 +82,26 @@ button {
 
 /* ── sidebar ────────────────────────────────────────────────────────────────── */
 
-.sidebar { overflow-y: auto; padding: var(--gap-sm) 0 var(--gap-lg); }
+/* A column, so the action groups can be pushed to the far end of it. */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: var(--gap-sm) 0 var(--gap-lg);
+}
 
-.sidebar__group { margin-top: var(--gap-lg); }
+.sidebar__group { margin-top: var(--gap-lg); flex: none; }
 .sidebar__group:first-child { margin-top: var(--gap-xs); }
+
+/*
+ * Import and Backup sit at the bottom, away from the views.
+ *
+ * `margin-top: auto` on the first of the two takes all the slack, which separates them
+ * from `Tags` by the height of the pane rather than by a gap someone has to pick. When the
+ * pane is too short for that, the slack is zero and the groups simply follow the views —
+ * so a short window degrades to the old stacking rather than overlapping anything.
+ */
+.sidebar__group--import { margin-top: auto; padding-top: var(--gap-lg); }
 
 .sidebar__heading {
   font: 600 var(--text-xs) / 1 var(--font-mono);
@@ -524,10 +540,16 @@ button {
   height: calc(18px * var(--scale));
   padding: 0 calc(7px * var(--scale));
   border-radius: calc(9px * var(--scale));
-  background: var(--bg);
-  border: 1px solid var(--border);
+  /*
+   * Raised, not recessed. `--bg` is *darker* than the pane it sits on, so a chip read as a
+   * hole punched in the surface with dim text at the bottom of it — and once the colour
+   * dot went, that was all a chip was. `--surface-raised` with `--fg` puts the label at
+   * body contrast (13.9:1 on dark) and the pill above the surface rather than below it.
+   */
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
   font: var(--text-xs) / 1 var(--font-mono);
-  color: var(--fg-muted);
+  color: var(--fg);
   white-space: nowrap;
 }
 
@@ -669,10 +691,21 @@ button {
    favicon, and a 100% basis there would push itself past the pane by the favicon's width. */
 .detail > .detail__title { flex: 1 0 100%; }
 
-/* Its own row under the title: a URL is long, and wrapping it beside a field would
-   squeeze both. */
-.detail__url {
+/* The action and the address, on one row of their own: a URL is long, and wrapping it
+   beside a field would squeeze both. */
+.detail__address {
   flex: 1 0 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  min-width: 0;
+}
+
+.detail__address .btn { flex: none; }
+
+.detail__url {
+  flex: 1 1 auto;
+  min-width: 0;
   font: var(--text-sm) / 1.4 var(--font-mono);
   color: var(--fg-muted);
   word-break: break-all;
@@ -697,19 +730,6 @@ button {
   color: var(--fg-faint);
   margin-bottom: var(--gap-sm);
 }
-
-.notes {
-  width: 100%;
-  min-height: calc(90px * var(--scale));
-  padding: var(--gap-sm);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  resize: vertical;
-  font-family: var(--font-ui);
-}
-
-.notes:focus { border-color: var(--accent); outline: none; box-shadow: none; }
 
 .stat-grid {
   display: grid;

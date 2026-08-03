@@ -108,7 +108,7 @@ export function App(props: { compact?: boolean }) {
   const searchPlaceholder = () => {
     if (onTabs()) return 'Search open tabs…';
     if (onTags()) return 'Search tags…';
-    return 'Search title, URL, notes, tags…';
+    return 'Search title, URL, tags…';
   };
 
   /** What `Enter` does here. Same rule as the triage hints: label the act, not the key. */

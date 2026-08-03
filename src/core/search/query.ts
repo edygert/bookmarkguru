@@ -66,7 +66,6 @@ function matchesTerm(bookmark: Bookmark, term: string, tagNames: ReadonlyMap<str
   // by far the common one — still stops at the first field that matches.
   if (hasTerm(bookmark.title.toLowerCase(), term)) return true;
   if (hasTerm(bookmark.url.toLowerCase(), term)) return true;
-  if (hasTerm(bookmark.notes.toLowerCase(), term)) return true;
   if (hasTerm(bookmark.description.toLowerCase(), term)) return true;
   return bookmark.tags.some((id) => {
     const name = tagNames.get(id);
@@ -92,7 +91,7 @@ function matchesText(
  *
  * A domain or open-now filter does not belong here — each would duplicate something
  * `matchesText` already does. `tag` is the exception because it matches on **id**: a text
- * search for a tag's name also hits titles, URLs and notes, so it cannot answer "exactly
+ * search for a tag's name also hits titles and URLs, so it cannot answer "exactly
  * the records carrying this tag", which is what the Tags view drills into.
  */
 function matchesFilters(bookmark: Bookmark, filters: Filters): boolean {

@@ -5,7 +5,7 @@ import type { Bookmark, Tag } from '../types';
 
 /**
  * A backup's only job is to come back identical. So most of these tests are fidelity
- * assertions on fields `ingest` would have thrown away — notes, status, favourites, ids —
+ * assertions on fields `ingest` would have thrown away — status, open counts, ids —
  * because those are exactly what distinguishes a restore from re-importing the same URLs.
  *
  * Fixtures are synthetic and abstract, per the same rule the rest of `io/` follows.
@@ -21,7 +21,6 @@ const RECORD: Bookmark = {
   domain: 'h1.example.com',
   title: 'A title',
   description: 'A description',
-  notes: 'A note that only exists here.',
   tags: ['tag:p1', 'tag:p1/shared'],
   createdAt: 1_600_000_000_000,
   updatedAt: 1_650_000_000_000,

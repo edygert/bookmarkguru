@@ -38,7 +38,7 @@ const seeded = await s.evaluate(`(async () => {
     tx.objectStore('bookmarks').put({
       id: 'bm:${TOKEN}-' + i,
       url, normalizedUrl: url, domain: 'triage.example',
-      title, description: '', notes: '', tags: [],
+      title, description: '', tags: [],
       // Descending, so the rendered order under the default createdAt-desc sort is
       // exactly the order of this array and the assertions can name rows by index.
       createdAt: 3000 - i, updatedAt: 3000 - i,

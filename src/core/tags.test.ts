@@ -24,7 +24,6 @@ function bookmark(tags: string[]): Bookmark {
     domain: `h${i}.example.com`,
     title: 'T',
     description: '',
-    notes: '',
     tags,
     createdAt: 1,
     updatedAt: 1,

@@ -88,7 +88,6 @@ export interface Bookmark {
   domain: string;
   title: string;
   description: string;
-  notes: string;
   /** Tag ids, not names — renaming a tag must not rewrite every bookmark. */
   tags: string[];
   createdAt: number;
@@ -153,7 +152,7 @@ export interface SortSpec {
 /**
  * Everything a full-fidelity JSON backup carries.
  *
- * Records go in and come out verbatim — ids, notes, status, open counts, `Tag.parent` —
+ * Records go in and come out verbatim — ids, statuses, open counts, `Tag.parent` —
  * which is the whole difference between a restore and an import. Nothing derived is
  * carried: the `meta` store holds settings and the search index, both rebuildable.
  */

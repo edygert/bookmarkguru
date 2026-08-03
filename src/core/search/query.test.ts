@@ -12,7 +12,6 @@ function bm(over: Partial<Bookmark> = {}): Bookmark {
     domain: 'example.com',
     title: `Item ${seq}`,
     description: '',
-    notes: '',
     tags: [],
     createdAt: seq,
     updatedAt: seq,
@@ -49,11 +48,11 @@ describe('status filtering', () => {
 describe('text matching', () => {
   const items = [
     bm({ title: 'Rust ownership guide', url: 'https://doc.rust-lang.org/book' }),
-    bm({ title: 'Unrelated', notes: 'mentions ownership in passing' }),
+    bm({ title: 'Unrelated', description: 'mentions ownership in passing' }),
     bm({ title: 'Nothing relevant' }),
   ];
 
-  it('matches title, url, and notes', () => {
+  it('matches title, url, and description', () => {
     expect(runQuery({ bookmarks: items, query: 'ownership', filters: {}, sort: SORT_NEW })).toHaveLength(2);
     expect(runQuery({ bookmarks: items, query: 'rust-lang', filters: {}, sort: SORT_NEW })).toHaveLength(1);
   });
@@ -143,7 +142,7 @@ describe('word boundaries', () => {
   it('finds a later occurrence when the first one is mid-word', () => {
     // 'cat' appears inside "concatenate" before it appears as a word. Bailing on the
     // first hit would report no match on a record that plainly has one.
-    const item = bm({ title: 'concatenate', notes: 'about a cat' });
+    const item = bm({ title: 'concatenate', description: 'about a cat' });
     expect(find([item], 'cat')).toHaveLength(1);
   });
 
@@ -163,7 +162,7 @@ describe('word boundaries', () => {
 /**
  * The one narrowing that is not typed. `tag` matches on id, which is what makes the Tags
  * view's count and the list it drills into the same number — a text search for the name
- * also hits titles, URLs and notes.
+ * also hits titles and URLs.
  */
 describe('tag scope', () => {
   const rust = bm({ title: 'Ownership', tags: ['tag:rust'] });

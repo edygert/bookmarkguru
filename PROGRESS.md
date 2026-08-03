@@ -111,8 +111,10 @@ src/
 
 ### Data model
 
-`Bookmark`: `id`, `url`, `normalizedUrl`, `domain`, `title`, `description`, `notes`,
-`tags` (ids), `createdAt`, `updatedAt`, `lastOpenedAt`, `openCount`, `status`, `source`.
+`Bookmark`: `id`, `url`, `normalizedUrl`, `domain`, `title`, `description`, `tags` (ids),
+`createdAt`, `updatedAt`, `lastOpenedAt`, `openCount`, `status`, `source`. **No notes
+field** — a tag says why a link is worth keeping, and the room the editor took is the room
+the chips needed.
 
 `Tag`: `id`, `name`, and `parent` on a qualified variant. Nothing else — no colour.
 
@@ -253,7 +255,7 @@ Each cost real debugging time. None were caught by `tsc`, vitest, or the build.
 
 The sidebar is navigation. **Every control in it replaces the list or acts on the whole
 library; nothing in it narrows.** Narrowing is the search box, which matches `title`,
-`url`, `notes`, `description` and tag *names*.
+`url`, `description` and tag *names*.
 
 | Control | Kind | Notes |
 |---|---|---|
@@ -270,7 +272,7 @@ would be a second path to something the text match already does, kept in step fo
 
 **The one exception is the tag scope**, and it is not a control — it is where the Tags view
 lands. `Show N links` sets `filters.tag` to a tag **id**, so the list is exactly the records
-that row counted; a search for the name would also match titles, URLs and notes and deliver
+that row counted; a search for the name would also match titles and URLs and deliver
 more rows than the button promised. While it is on, the toolbar shows the tag as a chip,
 which is both the notice that the list is scoped and the way out of it. Switching view
 clears it.
@@ -329,7 +331,7 @@ control. That makes two of the fields it scans load-bearing rather than convenie
 A term matches at the **start of a word**: `post` finds "postgres" and "post-mortem", not
 "compost". A query splits on whitespace and every term must match, not necessarily in the
 same field — `rust async` finds a page titled "Async patterns" at doc.rust-lang.org.
-Fields searched: `title`, `url`, `notes`, `description`, and tag *names* via `tagNames`.
+Fields searched: `title`, `url`, `description`, and tag *names* via `tagNames`.
 
 Three things in `hasTerm` are easy to get wrong:
 
@@ -659,7 +661,7 @@ that can wrongly reject someone's only copy — which is why a mangled `exported
 as unknown rather than being fatal.
 
 The file is pretty-printed, roughly doubling its size. The only way to check a backup is to
-open it and find a note you know you wrote.
+open it and find a record you know you saved.
 
 ---
 
@@ -681,6 +683,13 @@ explicit `:root[data-theme=…]` overrides.
 Sidebar full height on the left; the list **above** the detail pane, which takes a third of
 the height (`2fr / 1fr`). Both scroll independently and the page itself never scrolls —
 `minmax(0, …)` on each grid row is what allows that.
+
+**Import and Backup sit at the sidebar's bottom edge.** `margin-top: auto` on the first of
+the two takes the slack, so they are separated from the views by whatever the pane has
+spare rather than by a chosen gap; a pane too short for that degrades to plain stacking.
+
+In the detail pane the action leads the URL on one row — they are one statement, and
+stacking them spent a row of the pane whose scarce axis is height.
 
 The detail pane was a third column until horizontal space ran out: a 1440px window left the
 list 646px and an 1100px window left it 306px, so rows had a domain, a title and chips to

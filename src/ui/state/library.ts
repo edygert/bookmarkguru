@@ -465,7 +465,7 @@ async function exportBackup(): Promise<string> {
  * **Deliberately not `runImport`.** That path filters incoming records against the existing
  * library on `normalizedUrl` with "anything already in the library wins", so a restore run
  * through it would write nothing at all. It also routes through `ingest`, which mints fresh
- * ids and resets notes, favourites and open counts to defaults — every field a backup exists
+ * ids and resets statuses and open counts to defaults — every field a backup exists
  * to carry. Restore writes `Bookmark` records straight through instead.
  *
  * Nothing is written until `parseBackup` has accepted the file. Past that point a failure
@@ -749,7 +749,7 @@ function showTags(): void {
  * Drill from a row of the Tags view into the records that carry that tag.
  *
  * Scoped by **tag id**, so the list is exactly the records the row counted. A search for
- * the tag's name would also match titles, URLs and notes, which makes the list a superset
+ * the tag's name would also match titles and URLs, which makes the list a superset
  * and the count beside the control a lie (gotcha #12).
  *
  * Statuses widen to all three because the Tags view counts all three — landing on a view

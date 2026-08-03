@@ -6,9 +6,15 @@
  *
  * Two deliberate choices carry the identity:
  *
+ * ⚠️ **Every foreground token clears 4.5:1 on every surface it lands on, in both themes.**
+ *    `--fg-faint` is the one that drifts — it reads as "quiet", and quiet is one step from
+ *    unreadable. Measure against the *selected* row too, not just the pane: `--accent-soft`
+ *    is lighter than `--surface`, so a value that passes on the pane can fail on the row
+ *    under the cursor, which is the row you are looking at.
+ *
  * 1. Monospace is the voice of machine-readable identity — domains, counts, tags,
  *    keyboard hints. It is this subject's own vernacular: the URL bar, the terminal.
- *    Prose (titles, notes) stays in the system UI face, which is the most legible
+ *    Prose (titles, descriptions) stays in the system UI face, the most legible
  *    thing available at 13px.
  *
  * 2. Amber is reserved *exclusively* for "this link is open in a tab right now".
@@ -78,8 +84,8 @@
   --border-strong: #d2d2dd;
 
   --fg: #16161d;
-  --fg-muted: #6b6b7b;
-  --fg-faint: #9a9aa8;
+  --fg-muted: #67677a;
+  --fg-faint: #6a6a78;
 
   --accent: #4338ca;
   --accent-fg: #ffffff;
@@ -106,8 +112,8 @@
     --border-strong: #34343f;
 
     --fg: #e8e8f0;
-    --fg-muted: #8a8a9a;
-    --fg-faint: #62626f;
+    --fg-muted: #9c9cae;
+    --fg-faint: #8c8ca2;
 
     --accent: #818cf8;
     --accent-fg: #12121a;
@@ -130,8 +136,8 @@
   --border: #e4e4ec;
   --border-strong: #d2d2dd;
   --fg: #16161d;
-  --fg-muted: #6b6b7b;
-  --fg-faint: #9a9aa8;
+  --fg-muted: #67677a;
+  --fg-faint: #6a6a78;
   --accent: #4338ca;
   --accent-fg: #ffffff;
   --accent-soft: #eeecfb;
@@ -149,8 +155,8 @@
   --border: #26262f;
   --border-strong: #34343f;
   --fg: #e8e8f0;
-  --fg-muted: #8a8a9a;
-  --fg-faint: #62626f;
+  --fg-muted: #9c9cae;
+  --fg-faint: #8c8ca2;
   --accent: #818cf8;
   --accent-fg: #12121a;
   --accent-soft: #23233a;
