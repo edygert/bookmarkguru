@@ -3,6 +3,7 @@ import { createStore, produce, unwrap } from 'solid-js/store';
 import { repository } from '~/core/db/idb-repository';
 import { chromeTreeToBookmarks } from '~/core/io/chrome-import';
 import { htmlToBookmarks } from '~/core/io/html-import';
+import { readingListToBookmarks } from '~/core/io/reading-list-import';
 import { parseBackup, serializeBackup } from '~/core/io/json-backup';
 import type { ImportResult } from '~/core/io/ingest';
 import type { FolderRules } from '~/core/io/folder-tags';
@@ -355,6 +356,22 @@ export type ImportOutcome =
 async function importFromChrome(): Promise<ImportOutcome> {
   return runImport('Reading Chrome bookmarks…', async () =>
     chromeTreeToBookmarks(await chrome.bookmarks.getTree(), { rules }));
+}
+
+/**
+ * Chrome's reading list. Flat — no tree, no folders — so every item arrives carrying the
+ * one tag the parser states, and lands in the inbox.
+ *
+ * The availability check earns its place: the namespace is undefined in a browser that
+ * ships no reading list, and without it the click reports a raw TypeError.
+ */
+async function importFromReadingList(): Promise<ImportOutcome> {
+  if (typeof chrome.readingList === 'undefined') {
+    return { ok: false, error: 'This browser has no reading list.' };
+  }
+
+  return runImport('Reading your reading list…', async () =>
+    readingListToBookmarks(await chrome.readingList.query({})));
 }
 
 /**
@@ -810,7 +827,8 @@ export const library = {
   // writes
   setQuery, setFilters, setSort, setSelectedId, setSelectedTagId,
   showStatus, showTabs, showTags, showRecordsForTag, clearTagScope, selectTab,
-  load, watch, refreshOpenTabs, importFromChrome, importFromFiles, importProgress,
+  load, watch, refreshOpenTabs,
+  importFromChrome, importFromReadingList, importFromFiles, importProgress,
   exportBackup, restoreBackup,
   saveTabs, saveAllOpenTabs, focusTab,
   activate, updateBookmark, removeBookmark,

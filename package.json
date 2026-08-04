@@ -1,6 +1,6 @@
 {
   "name": "bookmarkguru",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "A searchable, tag-based link database with tab awareness. Chrome MV3 extension.",
@@ -19,7 +19,7 @@
     "guard:csp": "node scripts/guard-csp.mjs",
     "tags:preview": "vite-node --config vitest.config.ts scripts/tags-preview.ts",
     "check": "npm run guard:isolation && npm run guard:permissions && npm run typecheck && npm run test && npm run build && npm run guard:csp",
-    "e2e": "npm run build && ./scripts/e2e/launch.sh && node scripts/e2e/import-test.mjs && node scripts/e2e/switch-test.mjs && node scripts/e2e/popup-panel-test.mjs && node scripts/e2e/tabs-test.mjs && node scripts/e2e/search-test.mjs && node scripts/e2e/tags-crud-test.mjs && node scripts/e2e/triage-test.mjs && node scripts/e2e/import-file-test.mjs && node scripts/e2e/backup-test.mjs"
+    "e2e": "npm run build && ./scripts/e2e/launch.sh && node scripts/e2e/import-test.mjs && node scripts/e2e/reading-list-test.mjs && node scripts/e2e/switch-test.mjs && node scripts/e2e/popup-panel-test.mjs && node scripts/e2e/tabs-test.mjs && node scripts/e2e/search-test.mjs && node scripts/e2e/tags-crud-test.mjs && node scripts/e2e/triage-test.mjs && node scripts/e2e/import-file-test.mjs && node scripts/e2e/backup-test.mjs"
   },
   "dependencies": {
     "idb": "^8.0.3",

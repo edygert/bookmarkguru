@@ -110,13 +110,16 @@ export function Sidebar() {
   };
 
   /**
-   * Both sources report the same way, because they are the same import.
+   * Every source reports the same way, because they are the same import.
    *
    * A summary of all zeros is a real result — nothing in the file, or nothing new in it —
    * and it used to be indistinguishable from a crash, which returned all zeros too.
    * `added + alreadySaved + skipped` is the number of entries the parser produced.
+   *
+   * `emptyText` is passed in rather than derived, because it has to name the thing that
+   * was actually empty: "No bookmarks found" is wrong over an empty reading list.
    */
-  const report = (outcome: ImportOutcome, fromFile: boolean) => {
+  const report = (outcome: ImportOutcome, emptyText: string) => {
     if (!outcome.ok) {
       setImportNote({ text: outcome.error, error: true });
       return;
@@ -124,10 +127,7 @@ export function Sidebar() {
 
     const { added, alreadySaved, skipped } = outcome.summary;
     if (added + alreadySaved + skipped === 0) {
-      setImportNote({
-        text: fromFile ? 'No bookmarks in that file. Is it a browser export?' : 'No bookmarks found.',
-        error: true,
-      });
+      setImportNote({ text: emptyText, error: true });
     } else if (added === 0) {
       setImportNote({
         text: `Nothing new — all ${alreadySaved} ${plural(alreadySaved)} were already saved.`,
@@ -143,14 +143,22 @@ export function Sidebar() {
 
   const runChromeImport = async () => {
     setImportNote(null);
-    report(await library.importFromChrome(), false);
+    report(await library.importFromChrome(), 'No bookmarks found.');
+  };
+
+  const runReadingListImport = async () => {
+    setImportNote(null);
+    report(await library.importFromReadingList(), 'Your reading list is empty.');
   };
 
   const runFileImport = async () => {
     const files = importFiles();
     if (files.length === 0) return;
     setImportNote(null);
-    report(await library.importFromFiles(files), true);
+    report(
+      await library.importFromFiles(files),
+      'No bookmarks in that file. Is it a browser export?',
+    );
     setImportFiles([]);
   };
 
@@ -212,9 +220,10 @@ export function Sidebar() {
       </div>
 
       {/*
-        One import, two sources. The live tree is what Chrome has now; a file is a snapshot,
-        which is the only difference anyone sees — everything downstream of the two parsers
-        is shared, including the dedupe that makes a re-import add only what is new.
+        One import, three sources. The live tree is what Chrome has now, a file is a
+        snapshot, and the reading list is the read-later queue — everything downstream of
+        the three parsers is shared, including the dedupe that makes a re-import add only
+        what is new.
 
         Not a view, and deliberately not wearing `nav-item`.
       */}
@@ -228,6 +237,15 @@ export function Sidebar() {
             onClick={() => void runChromeImport()}
           >
             Import from Chrome
+          </button>
+
+          <button
+            type="button"
+            class="btn sidebar__reading-list"
+            disabled={importing()}
+            onClick={() => void runReadingListImport()}
+          >
+            Import reading list
           </button>
 
           <input

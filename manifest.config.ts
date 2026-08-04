@@ -23,6 +23,8 @@ export default defineManifest({
     'contextMenus',
     // Read-only. Used for one-directional first-run migration only; we never write back.
     'bookmarks',
+    // Read-only. The reading list is an import source; nothing is added, updated or removed.
+    'readingList',
   ],
 
   background: {

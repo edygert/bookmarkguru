@@ -33,6 +33,7 @@ const REQUIRES = {
   idle: 'idle',
   management: 'management',
   notifications: 'notifications',
+  readingList: 'readingList',
   scripting: 'scripting',
   sidePanel: 'sidePanel',
   storage: 'storage',

@@ -96,6 +96,7 @@ src/
     io/ingest.ts            RawEntry[] → records: dedupe, tag union, status routing
     io/chrome-import.ts     live bookmark tree → RawEntry[]
     io/html-import.ts       exported .html → RawEntry[] (regex, never DOMParser)
+    io/reading-list-import.ts  reading list → RawEntry[] (flat; one stated tag)
     io/tabs-import.ts       open tabs → RawEntry[] (sourceTags, no folder path)
     io/json-backup.ts       records ⇄ JSON string. NOT an importer — bypasses ingest
   shared/messages.ts        typed message contracts
@@ -264,7 +265,7 @@ library; nothing in it narrows.** Narrowing is the search box, which matches `ti
 | Tags | view | lists tags, including ones on no records; drills into a tag's records |
 | tag scope chip | state, in the toolbar | shows what the Tags view drilled into; clicking it leaves |
 | Delete, on a tag row | action | opens a dialog naming the links it would strip |
-| Import from Chrome · Import a file | action, own group | see "Importing" |
+| Import from Chrome · Import reading list · Import a file | action, own group | see "Importing" |
 | Export · Restore | action, own group | not `nav-item`: anything wearing that class in this pane reads as selectable |
 
 There is no tag list, domain list or `Open now` toggle, and none should be added: each
@@ -476,9 +477,9 @@ named `Rust` are the same tag by construction.
 
 ## Importing
 
-One import, two sources: Chrome's live tree and exported bookmark files. Both parsers
-produce `RawEntry[]` and feed the same `ingest`. The sidebar's `Import` group drives both and
-is available at any time, not only on an empty library.
+One import, three sources: Chrome's live tree, the reading list, and exported bookmark files.
+Every parser produces `RawEntry[]` and feeds the same `ingest`. The sidebar's `Import` group
+drives all three and is available at any time, not only on an empty library.
 
 - **The file picker takes several files at once.** Each runs as its own `runImport`, in order,
   and each ends with `load()` — so a later file dedupes against what an earlier one just
@@ -497,6 +498,22 @@ is available at any time, not only on an empty library.
 
 Measured on a real 4.8 MB export: 6,974 entries → 5,713 records, 315 tags (32 qualified), 331
 routed to the inbox, 14 skipped, under a second.
+
+### The reading list
+
+`chrome.readingList` is flat: a list of URL, title and creation time, with no tree, no folders
+and no labels anyone typed.
+
+- **Every item carries the tag `Reading List`,** stated through `sourceTags` so the folder
+  rules never see it. `folderPath` stays empty, which is what keeps them off it.
+- **Everything lands in `status: 'inbox'`.** A read-later queue is unprocessed by definition —
+  the same routing tab captures and saved tab sets get.
+- **A bookmark folder named `Reading List` is the same tag,** not a second one: both collectors
+  derive ids through `tagIdFromName`.
+- **`hasBeenRead` is not recorded.** Nothing in the app would branch on it, and it goes stale
+  the moment the page is read in the browser.
+- **The namespace is absent in browsers that ship no reading list,** where it is `undefined`
+  rather than empty. `importFromReadingList` checks for that and says so; the e2e script skips.
 
 ## Folder→tag rules
 
@@ -583,6 +600,7 @@ core/io/folder-tags.ts    noise classification + qualification. Pure. The rules.
 core/io/ingest.ts         RawEntry[] → records: dedupe, tag union, status routing.
 core/io/chrome-import.ts  live chrome.bookmarks tree → RawEntry[]. Roots by node id.
 core/io/html-import.ts    exported .html → RawEntry[]. Roots by PERSONAL_TOOLBAR_FOLDER.
+core/io/reading-list-import.ts  reading list → RawEntry[]. Flat, so no roots at all.
 ```
 
 Parsers read a format and stop. Root detection is the only thing that legitimately differs
