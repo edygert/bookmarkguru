@@ -85,6 +85,8 @@ scripts/
   guard-csp.mjs             no Function-constructor/eval in dist/
   check-links.py            link checker over a JSON backup — see "Link checking".
                             Outside the extension on purpose; needs `requests`
+  drop-hosts.py             deletes every record on a named host from a backup.
+                            Previews unless --write. Stdlib only
   e2e/                      browser-driven verification — see its README
 src/
   core/                     ← NO Solid, NO DOM, NO chrome.*
@@ -745,6 +747,34 @@ rule — no opinion, no edit — and it means `--strict` is a deliberate second 
 cheap experiment. Undoing one is a hand edit of the JSON.
 
 Flags: `-o` `-r` `--resume` `-j` `--timeout` `--limit` `--strict` `--keep`.
+
+### Dropping a whole host
+
+`scripts/drop-hosts.py` deletes every record on a named host. Stdlib only.
+
+```
+python3 scripts/drop-hosts.py <backup> oldvendor.example 'mirror.*' \
+    --hosts-file <name>.hosts.txt -r <report>.csv -w <pruned>.json
+```
+
+**It acts on what a per-record verdict cannot decide.** A host can be gone, or never have
+been reachable from the machine running the check — a retired vendor site, an employer's
+intranet, a LAN name, a domain the resolver blocks. All four look identical to a fetch;
+only a person knows which is which.
+
+A pattern matches the host and its subdomains; one containing `*` is a glob over the whole
+host, which is what states one name across two TLDs, or a name that is a prefix of
+something longer. Ports are stripped before matching, or a LAN bookmark (`nas:9000`)
+silently matches nothing.
+
+**It previews and writes nothing without `--write`** — the same two steps as the sidebar's
+Replace library, since a restore cannot be undone. Given `-r`, it shows each pattern's
+verdicts and **refuses to write if any matched link came back `ok`**, which is the last
+point a live link can be kept; `--force` overrides. Tags left on no record are named, not
+deleted — the Tags view has a Delete on every row.
+
+**Host lists are personal data** — they name an employer, a hobby, a home machine. A
+`--hosts-file` is `*.hosts.txt`, which is gitignored, for the reason `bookmarks*.html` is.
 
 ### Restore replaces
 

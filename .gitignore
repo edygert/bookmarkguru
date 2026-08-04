@@ -17,6 +17,9 @@ bookmarkguru-*.json
 # reached. Same personal data as the backup they were derived from.
 *.report.csv
 *.resume.json
+# A host list names real sites someone bookmarked — an employer's intranet, a LAN
+# machine, hobbies. drop-hosts.py --hosts-file reads these.
+*.hosts.txt
 
 # Folder names from a real bookmark tree are personal data too — clients, employers,
 # course codes, hobbies. The import rules that reference them stay local; only the
