@@ -1,6 +1,6 @@
 {
   "name": "bookmarkguru",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "A searchable, tag-based link database with tab awareness. Chrome MV3 extension.",

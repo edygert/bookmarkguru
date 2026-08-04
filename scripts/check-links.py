@@ -77,9 +77,10 @@ RETRY_BACKOFF = 1.5
 
 OK, DEAD, UNKNOWN, SKIPPED = "ok", "dead", "unknown", "skipped"
 
-# A HEAD is trusted only for these. Every other status is confirmed with a GET: plenty of
-# servers answer HEAD with 403, 405 or 500 and the same URL with 200.
-HEAD_TRUSTED = frozenset({404, 410})
+# Bumped whenever the probing rules change, so --resume cannot serve verdicts a later
+# version would not reach. A stale cache is invisible otherwise: the run looks complete
+# and reports the previous rules' answers.
+PROBE_VERSION = 2
 
 
 # ── verdicts ──────────────────────────────────────────────────────────────────
@@ -209,15 +210,18 @@ def _transient(error: str | None) -> bool:
 
 def probe(session: requests.Session, url: str, timeout: float) -> dict:
     """
-    HEAD, then GET unless the HEAD is one we trust, with one retry on a transport blip.
+    HEAD to settle the easy case, then GET for everything else, with one retry on a blip.
 
-    A transient failure over several thousand URLs otherwise manufactures dead links, and
-    a HEAD-only check reports working sites as broken.
+    ⚠️ **A HEAD is believed only when it says 2xx.** Nothing else it reports is trusted,
+    404 least of all: redirect handlers and CDNs routinely 404 a HEAD on a URL that GETs
+    200. An earlier version took HEAD's word for a 404 and marked 2 of 26 live links dead
+    in a 100-link trial. Confirming costs one extra request per link that is about to be
+    reported broken, which is the cheapest place in this script to spend a request.
+
+    The retry covers the other direction: a transient failure over several thousand URLs
+    otherwise manufactures dead links.
     """
     status, final_url, error = _request(session, "HEAD", url, timeout)
-
-    if error is None and status in HEAD_TRUSTED:
-        return {"status": status, "final_url": final_url, "reason": None}
     if error is None and 200 <= status < 300:
         return {"status": status, "final_url": final_url, "reason": None}
 
@@ -349,17 +353,22 @@ def report_progress(done: int, total: int, tally: dict[str, int]) -> None:
 def save_resume(path: Path | None, results: dict[str, dict]) -> None:
     if path is None:
         return
-    path.write_text(json.dumps(results), encoding="utf-8")
+    path.write_text(json.dumps({"probeVersion": PROBE_VERSION, "urls": results}), encoding="utf-8")
 
 
 def load_resume(path: Path | None) -> dict[str, dict]:
+    """Verdicts from an older probing rule are discarded rather than served."""
     if path is None or not path.exists():
         return {}
     try:
         cached = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
-    return cached if isinstance(cached, dict) else {}
+    if not isinstance(cached, dict) or cached.get("probeVersion") != PROBE_VERSION:
+        print(f"{path}: written by different probing rules — ignoring it.", file=sys.stderr)
+        return {}
+    urls = cached.get("urls")
+    return urls if isinstance(urls, dict) else {}
 
 
 # ── applying verdicts ─────────────────────────────────────────────────────────

@@ -724,6 +724,16 @@ first draft condemned all seven test links.
 summary.** One link failing on a host is a dead link; every link failing is usually the
 host, and that difference is invisible per record.
 
+**A HEAD is believed only when it says 2xx**; every other status is confirmed with a GET.
+404 is the one least worth trusting — redirect handlers and CDNs routinely answer HEAD
+404 on a URL that GETs 200, a government document host and a club site behind a redirect
+among them. Taking HEAD's word for it marked 2 of 26 live links dead in a 100-link trial.
+The confirming GET costs one request per link about to be called broken.
+
+**`--resume` carries `probeVersion`.** A cache written under different probing rules is
+discarded, not served: it would otherwise report the old rules' verdicts from a run that
+looks complete.
+
 **A verdict is written both ways** — a link that responds loses the tag — so the tag means
 "failed the most recent check". `--keep` opts out. `updatedAt` moves only where `tags`
 changed; `url`, `normalizedUrl` and `domain` are never rewritten, redirect or not.
