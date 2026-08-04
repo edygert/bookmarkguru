@@ -83,6 +83,8 @@ scripts/
                             naming one in a comment fails the build — reword, do not
                             weaken the guard
   guard-csp.mjs             no Function-constructor/eval in dist/
+  check-links.py            link checker over a JSON backup — see "Link checking".
+                            Outside the extension on purpose; needs `requests`
   e2e/                      browser-driven verification — see its README
 src/
   core/                     ← NO Solid, NO DOM, NO chrome.*
@@ -680,6 +682,66 @@ as unknown rather than being fatal.
 
 The file is pretty-printed, roughly doubling its size. The only way to check a backup is to
 open it and find a record you know you saved.
+
+---
+
+## Link checking
+
+`scripts/check-links.py` fetches every URL in a JSON backup and tags the dead ones
+`Unreachable`. Needs `requests`; run directly, like `make-icons.py`.
+
+```
+sidebar Export → bookmarkguru-<date>.json → python3 scripts/check-links.py <file>
+               → <name>.checked.json → sidebar Restore
+```
+
+**It is a script, not a feature, because the extension declares no `host_permissions`
+and makes no outbound request.** A checker inside it would end that property and the
+install prompt would begin saying "read your data on all websites".
+
+**The JSON backup is the only input that works.** Tagging means editing existing records,
+and only the backup carries ids, tags and statuses. An exported `.html` is an importer
+source, and re-import is additive — it leaves existing records alone.
+
+### Verdicts
+
+| Verdict | Cause | Tagged |
+|---|---|---|
+| `ok` | 2xx after redirects | no — the tag is removed |
+| `dead` | DNS failure, connection refused, TLS failure, timeout, 404, 410 | **yes** |
+| `unknown` | 401, 403, 405, 429, **5xx**, redirect loop, any other non-2xx | only with `--strict` |
+| `skipped` | not `http`/`https` | no — tags left as found |
+
+`dead` means one of two things and no others: nothing answered at that address, or
+something answered that the page is gone.
+
+**5xx is `unknown`.** It says the server is up and broken, not that the link is gone, and
+it is overwhelmingly transient — one sweep of a few thousand URLs will catch some host
+mid-deploy. Observed while building this: httpbin.org answered 503 to everything and the
+first draft condemned all seven test links.
+
+**A host where several URLs were fetched and none came back ok is reported before the
+summary.** One link failing on a host is a dead link; every link failing is usually the
+host, and that difference is invisible per record.
+
+**A verdict is written both ways** — a link that responds loses the tag — so the tag means
+"failed the most recent check". `--keep` opts out. `updatedAt` moves only where `tags`
+changed; `url`, `normalizedUrl` and `domain` are never rewritten, redirect or not.
+
+**The tag comes off on `ok` and on nothing else**, which makes `--strict` close to
+one-way: a link tagged for a 403 will 403 again, classify `unknown` again, and a
+non-strict run leaves it alone rather than clearing it. That follows from the `skipped`
+rule — no opinion, no edit — and it means `--strict` is a deliberate second pass, not a
+cheap experiment. Undoing one is a hand edit of the JSON.
+
+Flags: `-o` `-r` `--resume` `-j` `--timeout` `--limit` `--strict` `--keep`.
+
+### Restore replaces
+
+`restoreBackup` calls `clearAll()` and writes the file. That is what makes the round trip
+work — the output is the whole library with the tag edits folded in — and it is the way
+to lose data: **anything saved between the export and the restore is not in the file.**
+Export immediately before a run; keep the original until the restore is verified.
 
 ---
 

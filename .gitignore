@@ -3,14 +3,20 @@ dist/
 *.log
 .DS_Store
 .vite/
+__pycache__/
 
 # Bookmark exports are personal data — real browsing history, and URLs that carry live
 # session identifiers (PHPSESSID, CFID/CFTOKEN). Never commit one. Test fixtures are
 # synthetic and live in scripts/fixtures/.
 bookmarks*.html
 *.bookmarks.html
-# Backups written by the sidebar export, named bookmarkguru-<date>.json.
+# Backups written by the sidebar export, named bookmarkguru-<date>.json. Also covers
+# the <name>.checked.json that scripts/check-links.py writes beside one.
 bookmarkguru-*.json
+# check-links output: the CSV carries every URL in the library, the cache every URL it
+# reached. Same personal data as the backup they were derived from.
+*.report.csv
+*.resume.json
 
 # Folder names from a real bookmark tree are personal data too — clients, employers,
 # course codes, hobbies. The import rules that reference them stay local; only the
