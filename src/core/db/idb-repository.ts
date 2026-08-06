@@ -23,10 +23,6 @@ export class IdbRepository implements BookmarkRepository {
       upgrade(db, oldVersion) {
         upgrade(db, oldVersion);
       },
-      blocking() {
-        // Another context wants to upgrade; release the connection so it can.
-        void 0;
-      },
     });
     return this.#db;
   }
@@ -35,15 +31,6 @@ export class IdbRepository implements BookmarkRepository {
 
   async get(id: string): Promise<Bookmark | undefined> {
     return (await this.#open()).get('bookmarks', id);
-  }
-
-  async getMany(ids: string[]): Promise<Bookmark[]> {
-    if (ids.length === 0) return [];
-    const db = await this.#open();
-    const tx = db.transaction('bookmarks', 'readonly');
-    const found = await Promise.all(ids.map((id) => tx.store.get(id)));
-    await tx.done;
-    return found.filter((b): b is Bookmark => b !== undefined);
   }
 
   async getAll(): Promise<Bookmark[]> {
@@ -78,10 +65,6 @@ export class IdbRepository implements BookmarkRepository {
     await Promise.all([...ids.map((id) => tx.store.delete(id)), tx.done]);
   }
 
-  async count(): Promise<number> {
-    return (await this.#open()).count('bookmarks');
-  }
-
   // ── tags ─────────────────────────────────────────────────────────────────────
 
   async getTags(): Promise<Tag[]> {
@@ -103,20 +86,9 @@ export class IdbRepository implements BookmarkRepository {
     await (await this.#open()).delete('tags', id);
   }
 
-  // ── meta ─────────────────────────────────────────────────────────────────────
-
-  async getMeta<T>(key: string): Promise<T | undefined> {
-    const row = await (await this.#open()).get('meta', key);
-    return row?.value as T | undefined;
-  }
-
-  async setMeta<T>(key: string, value: T): Promise<void> {
-    await (await this.#open()).put('meta', { key, value });
-  }
-
   async clearAll(): Promise<void> {
     const db = await this.#open();
-    const stores = ['bookmarks', 'tags', 'meta'] as const;
+    const stores = ['bookmarks', 'tags'] as const;
     const tx = db.transaction(stores, 'readwrite');
     await Promise.all([...stores.map((s) => tx.objectStore(s).clear()), tx.done]);
   }

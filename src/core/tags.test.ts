@@ -23,7 +23,6 @@ function bookmark(tags: string[]): Bookmark {
     normalizedUrl: `h${i}.example.com/`,
     domain: `h${i}.example.com`,
     title: 'T',
-    description: '',
     tags,
     createdAt: 1,
     updatedAt: 1,

@@ -229,8 +229,6 @@ export interface FolderTagger {
   tagsFor(folderPath: readonly string[]): string[];
   /** Every tag created so far, general and qualified. */
   allTags(): Tag[];
-  /** Names that were qualified, for reporting. Lowercased. */
-  ambiguousNames(): ReadonlySet<string>;
 }
 
 /**
@@ -278,10 +276,6 @@ export function createFolderTagger(
 
     allTags() {
       return [...collector.all(), ...qualified.values()];
-    },
-
-    ambiguousNames() {
-      return ambiguous;
     },
   };
 }

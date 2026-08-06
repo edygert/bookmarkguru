@@ -26,8 +26,8 @@ export interface NormalizeOpts {
  *
  * `ref` is included because it is overwhelmingly a referrer tag, but it is
  * occasionally semantic. That is acceptable here: tracking-stripping is only
- * default-on for dedupe, and dedupe surfaces candidates in a review UI rather
- * than merging anything automatically.
+ * default-on for dedupe, which collapses exact-key repeats and unions their tags
+ * rather than discarding anything.
  */
 export const TRACKING_PARAMS: ReadonlySet<string> = new Set([
   'fbclid', 'gclid', 'dclid', 'gbraid', 'wbraid', 'msclkid', 'yclid', 'twclid',

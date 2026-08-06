@@ -11,7 +11,6 @@ function bm(over: Partial<Bookmark> = {}): Bookmark {
     normalizedUrl: `https://example.com/${seq}`,
     domain: 'example.com',
     title: `Item ${seq}`,
-    description: '',
     tags: [],
     createdAt: seq,
     updatedAt: seq,
@@ -48,11 +47,11 @@ describe('status filtering', () => {
 describe('text matching', () => {
   const items = [
     bm({ title: 'Rust ownership guide', url: 'https://doc.rust-lang.org/book' }),
-    bm({ title: 'Unrelated', description: 'mentions ownership in passing' }),
+    bm({ title: 'Unrelated', url: 'https://example.com/ownership-basics' }),
     bm({ title: 'Nothing relevant' }),
   ];
 
-  it('matches title, url, and description', () => {
+  it('matches title and url', () => {
     expect(runQuery({ bookmarks: items, query: 'ownership', filters: {}, sort: SORT_NEW })).toHaveLength(2);
     expect(runQuery({ bookmarks: items, query: 'rust-lang', filters: {}, sort: SORT_NEW })).toHaveLength(1);
   });
@@ -142,7 +141,7 @@ describe('word boundaries', () => {
   it('finds a later occurrence when the first one is mid-word', () => {
     // 'cat' appears inside "concatenate" before it appears as a word. Bailing on the
     // first hit would report no match on a record that plainly has one.
-    const item = bm({ title: 'concatenate', description: 'about a cat' });
+    const item = bm({ title: 'concatenate a cat' });
     expect(find([item], 'cat')).toHaveLength(1);
   });
 

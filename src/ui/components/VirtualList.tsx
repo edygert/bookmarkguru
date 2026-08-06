@@ -183,8 +183,8 @@ export function VirtualList<T>(props: {
        * you would pick a row with the mouse and find the keys dead. Focusing the
        * container here is what keeps the two input methods on speaking terms.
        *
-       * A nested control that calls `stopPropagation` — the domain filter, the tab
-       * Save button — never gets here, so it does not steal the cursor as a side effect.
+       * A nested control that calls `stopPropagation` — the tab Save button, the tag
+       * Delete — never gets here, so it does not steal the cursor as a side effect.
        */
       onClick={(e) => e.currentTarget.focus()}
       onKeyDown={onKeyDown}

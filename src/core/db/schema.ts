@@ -19,9 +19,9 @@ export interface BookmarkGuruDB extends DBSchema {
     value: Bookmark;
     indexes: {
       /**
-       * Deliberately NOT unique. Duplicates are a review workflow, not an error —
+       * Deliberately NOT unique. Duplicates are allowed by design, not an error —
        * a unique index would make bulk import fail on conflict instead of
-       * collecting candidates for the user to merge.
+       * storing them for later review.
        */
       normalizedUrl: string;
       domain: string;
@@ -38,11 +38,6 @@ export interface BookmarkGuruDB extends DBSchema {
     key: string;
     value: Tag;
     indexes: { name: string };
-  };
-  /** Settings and the serialized search index. */
-  meta: {
-    key: string;
-    value: { key: string; value: unknown };
   };
 }
 
@@ -64,14 +59,5 @@ export function upgrade(db: IDBPDatabase<BookmarkGuruDB>, oldVersion: number): v
     // distinguished by id and `parent`. A unique index makes the second putTags throw
     // ConstraintError and kills the import partway through.
     tags.createIndex('name', 'name');
-
-    db.createObjectStore('meta', { keyPath: 'key' });
   }
 }
-
-/** Keys used in the `meta` store. Centralised so they cannot drift apart. */
-export const META = {
-  schemaVersion: 'schemaVersion',
-  searchIndex: 'searchIndex',
-  settings: 'settings',
-} as const;

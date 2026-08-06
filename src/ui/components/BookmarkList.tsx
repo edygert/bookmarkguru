@@ -26,9 +26,9 @@ import type { Bookmark, BookmarkStatus } from '~/core/types';
  * whatever now occupies that index.
  *
  * **Deletion is guarded on the record's status, not on which view is showing.** Those
- * are the same thing today (`filters.status` always holds exactly one value), but the
- * planned domain/favourite filters can produce a mixed result set, and a per-record
- * guard is the one that stays correct there.
+ * are the same thing in a status view (`filters.status` holds one value), but drilling
+ * from a tag into its records widens the status filter to all three, so the result set is
+ * mixed — and a per-record guard is the one that stays correct there.
  */
 export function BookmarkList(props: {
   items: Bookmark[];

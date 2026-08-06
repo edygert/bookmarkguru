@@ -87,7 +87,6 @@ export interface Bookmark {
   /** Derived and indexed. Shown under the title, and a sort option. */
   domain: string;
   title: string;
-  description: string;
   /** Tag ids, not names — renaming a tag must not rewrite every bookmark. */
   tags: string[];
   createdAt: number;

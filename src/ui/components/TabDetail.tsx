@@ -5,8 +5,9 @@ import { library, type OpenTab } from '../state/library';
 /**
  * The selected open tab.
  *
- * The third pane in the same slot as `DetailPane` and `TagDetail`, one per view. It exists
- * so a tab's extra attributes — its group, its window, whether it is already saved — have
+ * The detail pane for a selected open tab, sharing the slot with `DetailPane`; the Tags
+ * view has no pane there. It exists so a tab's extra attributes — its group, its window,
+ * whether it is already saved — have
  * a home off the row: with a detail pane per view, every list is title-and-domain rows and
  * the attributes live in one place.
  *

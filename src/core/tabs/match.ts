@@ -56,14 +56,6 @@ export const exactNormalized: MatchStrategy = {
  */
 export const STRATEGIES: readonly MatchStrategy[] = [exactNormalized];
 
-export function matchesUrl(
-  candidateUrl: string,
-  targetUrl: string,
-  strategies: readonly MatchStrategy[] = STRATEGIES,
-): boolean {
-  return strategies.some((s) => s.matches(candidateUrl, targetUrl));
-}
-
 /**
  * First tab matching `targetUrl`, or undefined.
  *
@@ -84,7 +76,7 @@ export function findMatchingTab<T extends TabLike>(
 }
 
 /**
- * Normalized URLs of every open tab, for the "open now" badge and filter.
+ * Normalized URLs of every open tab, for the "open now" badge.
  * A Set because the list re-renders on every tab event and membership must be O(1).
  */
 export function openTabUrlSet(tabs: readonly TabLike[]): Set<string> {

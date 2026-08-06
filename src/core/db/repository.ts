@@ -13,16 +13,14 @@ import type { Bookmark, Tag } from '../types';
 export interface BookmarkRepository {
   // ── bookmarks ────────────────────────────────────────────────────────────────
   get(id: string): Promise<Bookmark | undefined>;
-  getMany(ids: string[]): Promise<Bookmark[]>;
   getAll(): Promise<Bookmark[]>;
-  /** Returns every match — duplicates are expected and reviewed, not prevented. */
+  /** Returns every match — duplicates are expected, not prevented. */
   findByNormalizedUrl(normalizedUrl: string): Promise<Bookmark[]>;
   put(bookmark: Bookmark): Promise<void>;
   /** Single transaction. Callers chunk large imports; see io/ingest. */
   putMany(bookmarks: Bookmark[]): Promise<void>;
   remove(id: string): Promise<void>;
   removeMany(ids: string[]): Promise<void>;
-  count(): Promise<number>;
 
   // ── tags ─────────────────────────────────────────────────────────────────────
   getTags(): Promise<Tag[]>;
@@ -30,13 +28,6 @@ export interface BookmarkRepository {
   putTags(tags: Tag[]): Promise<void>;
   removeTag(id: string): Promise<void>;
 
-  // ── meta ─────────────────────────────────────────────────────────────────────
-  getMeta<T>(key: string): Promise<T | undefined>;
-  setMeta<T>(key: string, value: T): Promise<void>;
-
-  /**
-   * Drop every record, `meta` included — so a caller that wipes in order to write
-   * something back has to re-set the first-run marker. Used by restore-from-backup.
-   */
+  /** Drop every bookmark and tag. Used by restore-from-backup. */
   clearAll(): Promise<void>;
 }

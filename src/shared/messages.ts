@@ -20,7 +20,7 @@ export type Message =
   /** Fan-out after a write, so other open surfaces refresh. Fire-and-forget. */
   | { kind: 'bookmarks-changed'; ids: string[] }
   /**
-   * Fan-out after a tag was renamed, recoloured, created or deleted.
+   * Fan-out after a tag was renamed, created or deleted.
    *
    * Separate from `bookmarks-changed` because renaming a tag touches **no** bookmark
    * record — that is the whole point of storing tag ids — and broadcasting a message

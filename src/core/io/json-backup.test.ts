@@ -20,7 +20,6 @@ const RECORD: Bookmark = {
   normalizedUrl: 'https://h1.example.com/page',
   domain: 'h1.example.com',
   title: 'A title',
-  description: 'A description',
   tags: ['tag:p1', 'tag:p1/shared'],
   createdAt: 1_600_000_000_000,
   updatedAt: 1_650_000_000_000,

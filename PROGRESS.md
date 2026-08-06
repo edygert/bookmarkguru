@@ -54,7 +54,7 @@ SURFACES (page contexts — own all IDB writes)
 src/core/  — framework-agnostic engine (plain TS, no Solid / DOM / chrome.*)
   repository · search · normalize · match · io
         ▼
-   IndexedDB  (bookmarks, tags, meta)
+   IndexedDB  (bookmarks, tags)
 
 background/service-worker.ts
   open-or-switch · commands · context menus · side-panel wiring
@@ -109,14 +109,14 @@ src/
     App.tsx                 shell: sidebar | list over detail. `compact` drops both
     state/library.ts        the ONLY place Solid meets the repository
     components/             Sidebar · VirtualList · BookmarkList · TabList · TagList ·
-                            DetailPane · TabDetail · TagDetail · …
+                            DetailPane · TabDetail · …
     styles/tokens.css       design tokens — read the header comment
     manager|panel|popup .html/.tsx
 ```
 
 ### Data model
 
-`Bookmark`: `id`, `url`, `normalizedUrl`, `domain`, `title`, `description`, `tags` (ids),
+`Bookmark`: `id`, `url`, `normalizedUrl`, `domain`, `title`, `tags` (ids),
 `createdAt`, `updatedAt`, `lastOpenedAt`, `openCount`, `status`, `source`. **No notes
 field** — a tag says why a link is worth keeping, and the room the editor took is the room
 the chips needed.
@@ -127,7 +127,7 @@ the chips needed.
 view drills into. `domain` stays a field on the record: it is the second line of every row
 and a sort option, but nothing filters on it.
 
-IndexedDB v1, `SCHEMA_VERSION` 1. Stores: `bookmarks`, `tags`, `meta`. Indexes on
+IndexedDB v1, `SCHEMA_VERSION` 1. Stores: `bookmarks`, `tags`. Indexes on
 `normalizedUrl`, `domain`, `createdAt`, `updatedAt`, `lastOpenedAt`, `status`, and `tags`
 (`multiEntry`); `tags.name` is indexed and **not unique** (gotcha #7). Only
 `normalizedUrl` is queried by index — everything else loads via `getAll()` and filters in
@@ -260,7 +260,7 @@ Each cost real debugging time. None were caught by `tsc`, vitest, or the build.
 
 The sidebar is navigation. **Every control in it replaces the list or acts on the whole
 library; nothing in it narrows.** Narrowing is the search box, which matches `title`,
-`url`, `description` and tag *names*.
+`url` and tag *names*.
 
 | Control | Kind | Notes |
 |---|---|---|
@@ -336,7 +336,7 @@ control. That makes two of the fields it scans load-bearing rather than convenie
 A term matches at the **start of a word**: `post` finds "postgres" and "post-mortem", not
 "compost". A query splits on whitespace and every term must match, not necessarily in the
 same field — `rust async` finds a page titled "Async patterns" at doc.rust-lang.org.
-Fields searched: `title`, `url`, `description`, and tag *names* via `tagNames`.
+Fields searched: `title`, `url`, and tag *names* via `tagNames`.
 
 Three things in `hasTerm` are easy to get wrong:
 
@@ -359,7 +359,8 @@ everything else it offers is answered more cheaply. An index must be built whene
 opens — it lives in page memory, so the manager and side panel each build their own — and
 then kept in step with every write.
 
-Storing it in `meta.searchIndex` avoids the rebuild and buys a worse failure. A cache would
+Persisting it as a serialized index in the database avoids the rebuild and buys a worse
+failure. A cache would
 be shared by contexts that are not: the popup writes straight to the repository without
 going through `library.ts`, so it can change the database while contributing nothing to the
 cache. A drifting index fails quietly by returning *fewer* results, and "not found" is
@@ -674,8 +675,8 @@ resets the armed state, so the button can never point at a file you have not loo
 again starts by wiping. A single-transaction `replaceAll` would buy a guarantee a retry
 already provides, at the cost of one unbounded transaction.
 
-**The file excludes the `meta` store.** `searchIndex` is derived from the records and is the
-largest value in the database; settings are not records.
+**The file carries only records.** A derived search index, were one ever stored, would be
+rebuildable from the records and is not part of the backup; settings are not records either.
 
 **Validation checks identity, not every field:** a `format` marker, the schema version, and
 both arrays present. The realistic mistake is picking the wrong file, and every rule beyond
@@ -836,7 +837,7 @@ second line spends height instead, which a scrolling list has.
 measurement per token. A single module-level number would window one list against another's
 height. Gotchas #3 and #9 apply to both tokens.
 
-**Attributes live in the detail pane, not on rows.** There is one per view — `DetailPane`,
-`TabDetail`, `TagDetail` — in the same slot, so no row has to carry chips, counts or state
-badges. That is also why tags are not on library rows: the detail pane lists them with a
+**Attributes live in the detail pane, not on rows.** There is one for the bookmark and tab
+views — `DetailPane`, `TabDetail` — in the same slot; the Tags view has none, so no row has
+to carry chips, counts or state badges. That is also why tags are not on library rows: the detail pane lists them with a
 remove button on each, and the search box already finds a record by tag name.

@@ -93,7 +93,6 @@ export function ingest(entries: readonly RawEntry[], options: IngestOptions): Im
       normalizedUrl,
       domain: domainOf(entry.url),
       title: entry.title.trim() || entry.url,
-      description: '',
       tags,
       createdAt: entry.dateAdded ?? now,
       updatedAt: now,

@@ -90,7 +90,6 @@ function Popup() {
         normalizedUrl: normalizeForDedupe(url()),
         domain: domainOf(url()),
         title: title().trim() || url(),
-        description: '',
         tags: tagIds,
         createdAt: now,
         updatedAt: now,

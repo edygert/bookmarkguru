@@ -66,7 +66,6 @@ function matchesTerm(bookmark: Bookmark, term: string, tagNames: ReadonlyMap<str
   // by far the common one — still stops at the first field that matches.
   if (hasTerm(bookmark.title.toLowerCase(), term)) return true;
   if (hasTerm(bookmark.url.toLowerCase(), term)) return true;
-  if (hasTerm(bookmark.description.toLowerCase(), term)) return true;
   return bookmark.tags.some((id) => {
     const name = tagNames.get(id);
     return name !== undefined && hasTerm(name.toLowerCase(), term);

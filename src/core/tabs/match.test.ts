@@ -1,24 +1,28 @@
 import { describe, it, expect } from 'vitest';
-import { findMatchingTab, matchesUrl, openTabUrlSet, type TabLike } from './match';
+import { findMatchingTab, openTabUrlSet, type TabLike } from './match';
 
-describe('matchesUrl', () => {
+// The exact-normalized strategy, exercised through the one function that uses it.
+describe('exact-normalized matching', () => {
+  const matches = (candidate: string, target: string) =>
+    findMatchingTab([{ url: candidate }], target) !== undefined;
+
   it('matches across cosmetic differences', () => {
-    expect(matchesUrl('HTTPS://Example.com:443/a', 'https://example.com/a')).toBe(true);
-    expect(matchesUrl('https://e.com/p?b=2&a=1', 'https://e.com/p?a=1&b=2')).toBe(true);
+    expect(matches('HTTPS://Example.com:443/a', 'https://example.com/a')).toBe(true);
+    expect(matches('https://e.com/p?b=2&a=1', 'https://e.com/p?a=1&b=2')).toBe(true);
   });
 
   it('treats a fragment as a different destination', () => {
     // /guide#install is not /guide — switching to the wrong tab feels broken.
-    expect(matchesUrl('https://docs.dev/guide#install', 'https://docs.dev/guide')).toBe(false);
+    expect(matches('https://docs.dev/guide#install', 'https://docs.dev/guide')).toBe(false);
   });
 
   it('does not match on tracking params being stripped', () => {
     // Conservative: opening a redundant tab beats hijacking the wrong one.
-    expect(matchesUrl('https://e.com/p?utm_source=x', 'https://e.com/p')).toBe(false);
+    expect(matches('https://e.com/p?utm_source=x', 'https://e.com/p')).toBe(false);
   });
 
   it('never matches empty or unparseable URLs to each other', () => {
-    expect(matchesUrl('', '')).toBe(false);
+    expect(matches('', '')).toBe(false);
   });
 });
 

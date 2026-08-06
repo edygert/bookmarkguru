@@ -182,8 +182,8 @@ describe('createFolderTagger — emission invariants', () => {
   });
 
   it('emits a qualified tag exactly when a name is ambiguous and has a parent', () => {
-    const { tagger, emitted } = tagAll();
-    const ambiguous = tagger.ambiguousNames();
+    const { emitted } = tagAll();
+    const ambiguous = findAmbiguousNames(CORPUS);
 
     CORPUS.forEach((path, i) => {
       const kept = keptPath(path);
