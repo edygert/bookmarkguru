@@ -3,8 +3,8 @@
 Chrome MV3 extension replacing the bookmark manager with a personal link database:
 search-first, tag-based, tab-aware.
 
-**Status:** Phase 1 and 2 complete and runtime-verified. `npm run check` and `npm run e2e`
-are green as of this commit.
+**Status:** Phase 1 and 2 complete and runtime-verified, after a dead-code and
+comment-accuracy pass. `npm run check` and `npm run e2e` are green as of this commit.
 
 **Product rule:** Chrome's bookmark tree is an import bridge only — never the live data
 model, never the primary UI, and nothing exports back to it. On import, folders become
